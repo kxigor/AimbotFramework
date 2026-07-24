@@ -1,40 +1,56 @@
 # AimbotFramework
 
-A minimal C++23 project skeleton for a single-player Far Cry 3 experiment
-(WinAPI / geometry / reverse-engineering practice). It is **structure only** —
-the framework code is yours to write. What ships here:
-
-- **`afw::process`** — generic access to the host process (module bases,
-  pattern scanning, memory helpers). Engine-agnostic. Empty skeleton.
-- **`afw::games::fc3`** — Far Cry 3 (Dunia) specific bindings: offsets, structs,
-  entity/bone/view-matrix reading. Depends on `afw::process`. One library per
-  title, so more games sit alongside as `afw::games::<title>`. Empty skeleton.
-- **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic (a game will be
-  wired in later behind an interface). Empty skeleton.
-- **`aimbot.dll`** — a DLL shim: a stub `DllMain` that compiles and hosts the
-  libraries above.
-- the build/QA machinery from the upstream template, fixed for **MSYS2 UCRT64**
-  (PE hardening, platform-gated sanitizers, optional coverage, tool discovery).
+A personal C++23 project for learning the Windows API, reverse-engineering and
+3D geometry, using a single-player copy of **Far Cry 3** (Dunia engine) as the
+subject. It is a work in progress: the low-level plumbing works, the
+game-specific and aim-assist logic is still being written.
 
 `afw` = **A**imbot**F**rame**w**ork (namespace / target prefix).
+
+## Status
+
+Working:
+
+- **`afw::win`** — RAII wrappers over raw Win32 resources: `ScopedHandle`
+  (`CloseHandle`), `RemoteMemory` (`VirtualFreeEx` in another process), and a
+  `LastError()` helper that turns `GetLastError` into a `std::error_code`.
+- **`afw::remote`** — find a process by name and inject a DLL into it via the
+  classic CreateRemoteThread + LoadLibraryW technique. Reports failures as
+  `std::expected<T, std::error_code>`.
+- **`injector.exe`** — standalone tool that locates the target and loads
+  `aimbot.dll` into it.
+- **`aimbot.dll`** — stub `DllMain` that compiles and will host the libraries
+  below.
+
+Still to write:
+
+- **`afw::process`** — generic access to the host process (module bases, pattern
+  scanning, memory helpers). Engine-agnostic.
+- **`afw::games::fc3`** — Far Cry 3 (Dunia) bindings: offsets, structs,
+  entity/bone/view-matrix reading. Depends on `afw::process`. One library per
+  title, so more games can sit alongside as `afw::games::<title>`.
+- **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic (a game is wired
+  in behind an interface).
 
 ## Layout
 
 ```
-CMakeLists.txt          root: options (AFW_*), structure
+CMakeLists.txt          root: options (AFW_*) and subdirectories
 CMakePresets.json       UCRT64-oriented presets
 cmake/                  ProjectOptions / Sanitizers / Coverage / Format / Tidy / Gtest
 include/afw/            public headers (sibling of src/)
-  process/              afw::process headers      <- your headers
-  games/fc3/            afw::games::fc3 headers    <- your headers
-  aimbot/               afw::aimbot headers        <- your headers
+  win/                  afw::win     (implemented)
+  remote/               afw::remote  (implemented)
+  process/ games/ aimbot/  headers (planned)
 src/
-  process/              afw::process     (STATIC)  <- your code
-  games/fc3/            afw::games::fc3  (STATIC)  <- your code
-  aimbot/               afw::aimbot      (STATIC)  <- your code
+  win/                  afw::win     (STATIC, Windows-only)
+  remote/               afw::remote  (STATIC, Windows-only)
+  process/ games/fc3/ aimbot/  (STATIC, empty namespaces for now)
+injector/
+  injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
 dll/
   dllmain.cpp           stub entry point -> aimbot.dll
-tests/                  GTest + CTest wiring (one placeholder test)
+tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
 
@@ -53,7 +69,7 @@ cmake --preset ci-release
 cmake --build --preset ci-release
 ```
 
-The output is `aimbot.dll` (no `lib` prefix), with the MinGW runtime linked
+The DLL output is `aimbot.dll` (no `lib` prefix), with the MinGW runtime linked
 statically so it does not need MSYS2 runtime DLLs on the host's search path, and
 PE hardening enabled (`--dynamicbase --nxcompat --high-entropy-va`).
 
@@ -77,6 +93,7 @@ PE hardening enabled (`--dynamicbase --nxcompat --high-entropy-va`).
 | Option                   | Default            | Meaning                          |
 |--------------------------|--------------------|----------------------------------|
 | `AFW_BUILD_DLL`          | ON (top-level+Win) | build `aimbot.dll`               |
+| `AFW_BUILD_INJECTOR`     | ON (top-level+Win) | build `injector.exe`             |
 | `AFW_BUILD_TESTS`        | ON (top-level)     | build the GTest suite            |
 | `AFW_ENABLE_FORMAT_CHECK`| ON (top-level)     | register clang-format as a test  |
 | `AFW_ENABLE_TIDY_CHECK`  | ON (top-level)     | register clang-tidy as a test    |
