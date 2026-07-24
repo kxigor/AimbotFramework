@@ -1,93 +1,142 @@
-#include <tlhelp32.h>
+// clang-format off
 #include <windows.h>
 
+#include <tlhelp32.h>
+
 #include <afw/remote/remote.hpp>
+#include <afw/win/error.hpp>
+#include <afw/win/remote_memory.hpp>
+#include <afw/win/scoped_handle.hpp>
+
 #include <cstddef>
+#include <cwchar>
+#include <expected>
+#include <system_error>
 
 namespace afw::remote {
 
-DWORD GetPidByProcName(PCWSTR procName) {
-  HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-  if (snapshot == INVALID_HANDLE_VALUE) {
-    return 0;
+using afw::win::LastError;
+using afw::win::RemoteMemory;
+using afw::win::ScopedHandle;
+
+std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
+  ScopedHandle snapshot{CreateToolhelp32Snapshot(
+      /*dwFlags       = */ TH32CS_SNAPPROCESS,
+      /*th32ProcessID = */ 0)};
+  if (!snapshot) {
+    return std::unexpected{LastError()};
   }
 
-  PROCESSENTRY32W entry = {.dwSize = sizeof(PROCESSENTRY32W)};
-  DWORD pid = -1;
+  PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
 
-  if (Process32FirstW(snapshot, &entry)) {
-    do {
-      if (_wcsicmp(entry.szExeFile, procName) == 0) {
-        pid = entry.th32ProcessID;
-        break;
-      }
-    } while (Process32NextW(snapshot, &entry));
+  BOOL hasProcess{Process32FirstW(
+      /*hSnapshot = */ snapshot.Get(),
+      /*lppe      = */ &entry)};
+  if (hasProcess == FALSE) {
+    return std::unexpected{LastError()};
   }
 
-  CloseHandle(snapshot);
-  return pid;
+  while (hasProcess != FALSE) {
+    if (_wcsicmp(&entry.szExeFile[0], procName) == 0) {
+      return entry.th32ProcessID;
+    }
+    hasProcess = Process32NextW(
+        /*hSnapshot = */ snapshot.Get(),
+        /*lppe      = */ &entry);
+  }
+
+  return std::unexpected{std::make_error_code(std::errc::no_such_process)};
 }
 
-LPVOID StrDupEx(HANDLE proc, PCWSTR dllPath) {
-  const std::size_t kDllPathByteSize = (wcslen(dllPath) + 1) * sizeof(WCHAR);
+std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
+                                                      PCWSTR dllPath) {
+  const std::size_t kDllPathByteSize{(wcslen(dllPath) + 1) * sizeof(WCHAR)};
 
-  LPVOID remoteDllPath = VirtualAllocEx(
-    proc, 
-    nullptr, 
-    kDllPathByteSize,
-    MEM_COMMIT, 
-    PAGE_READWRITE
-  );
-
+  LPVOID remoteDllPath{VirtualAllocEx(
+      /*hProcess         = */ proc,
+      /*lpAddress        = */ nullptr,
+      /*dwSize           = */ kDllPathByteSize,
+      /*flAllocationType = */ MEM_COMMIT,
+      /*flProtect        = */ PAGE_READWRITE)};
   if (remoteDllPath == nullptr) {
-    return nullptr;
+    return std::unexpected{LastError()};
   }
 
-  bool writeStatus = WriteProcessMemory(
-    proc, 
-    remoteDllPath, 
-    dllPath,
-    kDllPathByteSize, 
-    nullptr
-  );
+  RemoteMemory remoteMem{proc, remoteDllPath};
 
-  if (!writeStatus) {
-    return nullptr;
+  BOOL writeStatus{WriteProcessMemory(
+      /*hProcess               = */ proc,
+      /*lpBaseAddress          = */ remoteDllPath,
+      /*lpBuffer               = */ dllPath,
+      /*nSize                  = */ kDllPathByteSize,
+      /*lpNumberOfBytesWritten = */ nullptr)};
+  if (writeStatus == FALSE) {
+    return std::unexpected{LastError()};
   }
 
-  return remoteDllPath;
+  return remoteMem;
 }
 
-HMODULE GetRemoteLoadLibraryAddr() {
-  HMODULE k32 = GetModuleHandleA("kernel32.dll");
-  HMODULE remoteLoadLibraryAddr = GetProcAddress(k32, "LoadLibraryW");
-  return remoteLoadLibraryAddr;
+std::expected<LPTHREAD_START_ROUTINE, std::error_code>
+GetRemoteLoadLibraryAddr() {
+  HMODULE k32{GetModuleHandleA(
+      /*lpModuleName = */ "kernel32.dll")};
+  if (k32 == nullptr) {
+    return std::unexpected{LastError()};
+  }
+
+  FARPROC loadLibraryAddr{GetProcAddress(
+      /*hModule    = */ k32,
+      /*lpProcName = */ "LoadLibraryW")};
+  if (loadLibraryAddr == nullptr) {
+    return std::unexpected{LastError()};
+  }
+
+  // kernel32.dll is mapped at the same base in every process of a session, so
+  // the local address of LoadLibraryW is also valid in the target process.
+  // LoadLibraryW's signature differs from LPTHREAD_START_ROUTINE, but on x64
+  // the two are ABI-compatible (one pointer in, pointer-sized value out) -- that
+  // is what makes the CreateRemoteThread trick work. The type-mismatch cast is
+  // therefore intentional; silence -Wcast-function-type just for it.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+  return reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddr);
+#pragma GCC diagnostic pop
 }
 
-bool LoadDll(HANDLE proc, PCWSTR dllPath) {
-  LPVOID remoteDllPath = StrDupEx(proc, dllPath);
+std::expected<void, std::error_code> LoadDll(HANDLE proc, PCWSTR dllPath) {
+  std::expected<RemoteMemory, std::error_code> remoteDllPath{
+      StrDupEx(proc, dllPath)};
+  if (!remoteDllPath) {
+    return std::unexpected{remoteDllPath.error()};
+  }
 
-  LPTHREAD_START_ROUTINE remoteLoadLibraryAddr =
-      static_cast<LPTHREAD_START_ROUTINE>(GetRemoteLoadLibraryAddr());
+  std::expected<LPTHREAD_START_ROUTINE, std::error_code> remoteLoadLibraryAddr{
+      GetRemoteLoadLibraryAddr()};
+  if (!remoteLoadLibraryAddr) {
+    return std::unexpected{remoteLoadLibraryAddr.error()};
+  }
 
-  HANDLE remoteThread = CreateRemoteThread(
-      /*hProcess            = */ process,
-      /*lpThreadAttributes  = */ NULL,
-      /*dwStackSize         = */ NULL,
-      /*lpStartAddress      = */ remoteLoadLibraryAddr,
-      /*lpParameter         = */ remoteString,
-      /*dwCreationFlags     = */ NULL,
-      /*lpThreadId          = */ NULL);
+  ScopedHandle remoteThread{CreateRemoteThread(
+      /*hProcess           = */ proc,
+      /*lpThreadAttributes = */ nullptr,
+      /*dwStackSize        = */ 0,
+      /*lpStartAddress     = */ *remoteLoadLibraryAddr,
+      /*lpParameter        = */ remoteDllPath->Get(),
+      /*dwCreationFlags    = */ 0,
+      /*lpThreadId         = */ nullptr)};
+  if (!remoteThread) {
+    return std::unexpected{LastError()};
+  }
 
-  WaitForSingleObject(
-    /*hHandle         = */ thread, 
-    /*dwMilliseconds  = */ INFINITE
-  );
+  DWORD waitResult{WaitForSingleObject(
+      /*hHandle        = */ remoteThread.Get(),
+      /*dwMilliseconds = */ INFINITE)};
+  if (waitResult == WAIT_FAILED) {
+    return std::unexpected{LastError()};
+  }
 
-  CloseHandle(
-    /*hObject = */ thread
-  );
-
+  return {};
 }
 
-};  // namespace afw::remote
+}  // namespace afw::remote
