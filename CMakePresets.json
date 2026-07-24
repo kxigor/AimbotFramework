@@ -1,0 +1,122 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "description": "Configure from an MSYS2 UCRT64 shell (cmake/ninja/clang live there).",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "AFW_BUILD_TESTS": "ON",
+        "AFW_BUILD_DLL": "ON"
+      }
+    },
+
+    {
+      "name": "dev-debug",
+      "displayName": "Debug + Tests + DLL (GCC, no sanitizer)",
+      "description": "Primary UCRT64 development build. GCC has no sanitizer runtime, so SANITIZER_MODE stays None.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER_MODE": "None"
+      }
+    },
+    {
+      "name": "dev-debug-asan",
+      "displayName": "Debug + Tests + AddressSanitizer (Clang)",
+      "description": "ASan+UBSan. On Windows only Clang ships the ASan runtime, so this preset forces clang++.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "SANITIZER_MODE": "Address"
+      }
+    },
+    {
+      "name": "dev-debug-ubsan",
+      "displayName": "Debug + Tests + UndefinedBehaviorSanitizer (Clang)",
+      "description": "UBSan only. Reliable under Clang on Windows; forces clang++.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++",
+        "SANITIZER_MODE": "Undefined"
+      }
+    },
+
+    {
+      "name": "ci-coverage",
+      "displayName": "Debug + Tests + Coverage",
+      "description": "gcov instrumentation (GCC). Debug so branches/inlining stay observable. Static analysis off for speed.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER_MODE": "None",
+        "AFW_ENABLE_COVERAGE": "ON",
+        "AFW_ENABLE_FORMAT_CHECK": "OFF",
+        "AFW_ENABLE_TIDY_CHECK": "OFF"
+      }
+    },
+    {
+      "name": "ci-relwithdebinfo",
+      "displayName": "RelWithDebInfo + Tests",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "SANITIZER_MODE": "None"
+      }
+    },
+    {
+      "name": "ci-release",
+      "displayName": "Release DLL (no tests)",
+      "description": "Final aimbot.dll build. Tests off, no sanitizers.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SANITIZER_MODE": "None",
+        "AFW_BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+
+  "buildPresets": [
+    { "name": "dev-debug", "configurePreset": "dev-debug" },
+    { "name": "dev-debug-asan", "configurePreset": "dev-debug-asan" },
+    { "name": "dev-debug-ubsan", "configurePreset": "dev-debug-ubsan" },
+    { "name": "ci-coverage", "configurePreset": "ci-coverage" },
+    { "name": "ci-relwithdebinfo", "configurePreset": "ci-relwithdebinfo" },
+    { "name": "ci-release", "configurePreset": "ci-release" }
+  ],
+
+  "testPresets": [
+    {
+      "name": "dev-debug",
+      "configurePreset": "dev-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "stopOnFailure": true }
+    },
+    {
+      "name": "dev-debug-asan",
+      "configurePreset": "dev-debug-asan",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-coverage",
+      "configurePreset": "ci-coverage",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "ci-relwithdebinfo",
+      "configurePreset": "ci-relwithdebinfo",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}

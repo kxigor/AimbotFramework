@@ -1,0 +1,12 @@
+{
+  // Use clang-format (matches the CTest 'FormatCheck' target)
+  "C_Cpp.formatting": "clangFormat",
+  // Same binary CMake finds in UCRT64 -> identical results to FormatCheck.
+  // Machine-specific path; adjust if LLVM/clang-format lives elsewhere.
+  "C_Cpp.clang_format_path": "C:/msys64/ucrt64/bin/clang-format.exe",
+  // "file" = read the project-root .clang-format
+  "C_Cpp.clang_format_style": "file",
+
+  "[cpp]": { "editor.defaultFormatter": "ms-vscode.cpptools" },
+  "[c]":   { "editor.defaultFormatter": "ms-vscode.cpptools" }
+}

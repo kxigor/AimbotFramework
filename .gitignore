@@ -67,3 +67,16 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Coverage (gcov / gcovr / lcov)
+*.gcda
+*.gcno
+*.gcov
+coverage_report/
+coverage.info
+
+# CMake user-local presets (not shared)
+CMakeUserPresets.json
+
+# Editor / tooling
+.claude/
