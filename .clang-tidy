@@ -21,7 +21,9 @@ Checks: >
   -llvm-header-guard,
   -bugprone-easily-swappable-parameters,
   -misc-use-internal-linkage,
-  -misc-include-cleaner
+  -misc-include-cleaner,
+  -cppcoreguidelines-pro-type-vararg,
+  -hicpp-vararg
 WarningsAsErrors: '*'
 
 # WinAPI notes:
@@ -29,6 +31,9 @@ WarningsAsErrors: '*'
 #      keep external linkage; the check would wrongly push them to `static`.
 #   -misc-include-cleaner : windows.h is an umbrella header, so every Win32 type
 #      (HINSTANCE, DWORD, LPVOID, ...) trips "no header directly provides X".
+#   -cppcoreguidelines-pro-type-vararg / -hicpp-vararg : console output uses the
+#      C stdio printf family (wide-char %ls aware); there is no non-variadic
+#      standard alternative for Unicode console output on Windows.
 
 CheckOptions:
   - key: readability-function-size.LineThreshold

@@ -21,6 +21,7 @@ target_link_libraries(aimbot
   PRIVATE
     afw::aimbot
     afw::games::fc3   # pulls in afw::process transitively
+    afw::win          # RAII wrappers (ScopedHandle) used in DllMain
 )
 
 # Dev-time interface targets are optional (see root CMakeLists).

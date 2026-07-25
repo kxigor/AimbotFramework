@@ -20,17 +20,17 @@ using afw::win::RemoteMemory;
 using afw::win::ScopedHandle;
 
 std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
-  ScopedHandle snapshot{CreateToolhelp32Snapshot(
+  const ScopedHandle kSnapshot{CreateToolhelp32Snapshot(
       /*dwFlags       = */ TH32CS_SNAPPROCESS,
       /*th32ProcessID = */ 0)};
-  if (!snapshot) {
+  if (!kSnapshot) {
     return std::unexpected{LastError()};
   }
 
   PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
 
   BOOL hasProcess{Process32FirstW(
-      /*hSnapshot = */ snapshot.Get(),
+      /*hSnapshot = */ kSnapshot.Get(),
       /*lppe      = */ &entry)};
   if (hasProcess == FALSE) {
     return std::unexpected{LastError()};
@@ -41,7 +41,7 @@ std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
       return entry.th32ProcessID;
     }
     hasProcess = Process32NextW(
-        /*hSnapshot = */ snapshot.Get(),
+        /*hSnapshot = */ kSnapshot.Get(),
         /*lppe      = */ &entry);
   }
 
@@ -64,13 +64,13 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
 
   RemoteMemory remoteMem{proc, remoteDllPath};
 
-  BOOL writeStatus{WriteProcessMemory(
+  const BOOL kWriteStatus{WriteProcessMemory(
       /*hProcess               = */ proc,
       /*lpBaseAddress          = */ remoteDllPath,
       /*lpBuffer               = */ dllPath,
       /*nSize                  = */ kDllPathByteSize,
       /*lpNumberOfBytesWritten = */ nullptr)};
-  if (writeStatus == FALSE) {
+  if (kWriteStatus == FALSE) {
     return std::unexpected{LastError()};
   }
 
@@ -100,6 +100,7 @@ GetRemoteLoadLibraryAddr() {
   // therefore intentional; silence -Wcast-function-type just for it.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
   return reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddr);
 #pragma GCC diagnostic pop
 }
@@ -117,7 +118,7 @@ std::expected<void, std::error_code> LoadDll(HANDLE proc, PCWSTR dllPath) {
     return std::unexpected{remoteLoadLibraryAddr.error()};
   }
 
-  ScopedHandle remoteThread{CreateRemoteThread(
+  const ScopedHandle kRemoteThread{CreateRemoteThread(
       /*hProcess           = */ proc,
       /*lpThreadAttributes = */ nullptr,
       /*dwStackSize        = */ 0,
@@ -125,14 +126,14 @@ std::expected<void, std::error_code> LoadDll(HANDLE proc, PCWSTR dllPath) {
       /*lpParameter        = */ remoteDllPath->Get(),
       /*dwCreationFlags    = */ 0,
       /*lpThreadId         = */ nullptr)};
-  if (!remoteThread) {
+  if (!kRemoteThread) {
     return std::unexpected{LastError()};
   }
 
-  DWORD waitResult{WaitForSingleObject(
-      /*hHandle        = */ remoteThread.Get(),
+  const DWORD kWaitResult{WaitForSingleObject(
+      /*hHandle        = */ kRemoteThread.Get(),
       /*dwMilliseconds = */ INFINITE)};
-  if (waitResult == WAIT_FAILED) {
+  if (kWaitResult == WAIT_FAILED) {
     return std::unexpected{LastError()};
   }
 
