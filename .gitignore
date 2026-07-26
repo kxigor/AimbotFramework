@@ -65,7 +65,7 @@ vcpkg_installed/
 *.dwo
 
 # test output & cache
-Testing/
+Testing/  
 .cache/
 
 # Coverage (gcov / gcovr / lcov)
@@ -81,6 +81,7 @@ CMakeUserPresets.json
 # Editor / tooling
 .claude/
 CLAUDE.md
+PLAN.md
 
 # VSCODE
 .vscode

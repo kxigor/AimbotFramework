@@ -2,14 +2,16 @@
 # afw::win  (STATIC)
 # =========================================================
 # Thin RAII wrappers over raw Win32 resources: ScopedHandle (CloseHandle),
-# RemoteMemory (VirtualFreeEx in another process), plus a header-only LastError
-# helper (error.hpp) that turns GetLastError into a std::error_code. General
-# Win32 plumbing, reused by afw::remote and the injector. Windows-only, so it is
-# added from src/ only under WIN32.
+# RemoteMemory (VirtualFreeEx in another process), ProtectGuard (VirtualProtect),
+# plus two header-only helpers -- LastError (error.hpp), which turns GetLastError
+# into a std::error_code, and ComPtr (com_ptr.hpp), which releases a COM
+# interface. General Win32 plumbing, reused by afw::remote, afw::hook and the
+# injector. Windows-only, so it is added from src/ only under WIN32.
 
 add_library(afw_win STATIC
   scoped_handle.cpp
   remote_memory.cpp
+  protect_guard.cpp
 )
 add_library(afw::win ALIAS afw_win)
 

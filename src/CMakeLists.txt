@@ -8,20 +8,33 @@
 #   afw::process      generic access to the host process (memory, modules, scan)
 #   afw::games::<t>   per-title, engine-specific bindings; depend on afw::process
 #   afw::aimbot       the aim-assist logic (engine-agnostic)
+#   afw::config       settings shared by the overlay's consumers
 #   afw::win          RAII wrappers over raw Win32 resources (handles, memory)
 #   afw::remote       Windows DLL-injection helpers (Toolhelp + CreateRemoteThread)
+#   afw::hook         function interception (virtual method table, window proc)
+#   afw::render       owns the Present hook; the overlay's foundation
+#   afw::menu         the overlay's user interface
+#   afw::esp          entity boxes projected into screen space
 #
-# Dependency direction: games::* -> process ; the DLL shim wires a game into the
-# aimbot. None contains a Windows entry point. process / games / aimbot are still
-# empty skeletons; afw::remote is implemented and Windows-only.
+# Dependency direction: games::* -> process ; render -> hook -> win ; menu and
+# esp are siblings on top of render, sharing state only through config, so
+# neither one requires the other to run. The DLL shim wires a game into the
+# overlay. None contains a Windows entry point. process / games / aimbot are
+# still empty skeletons; afw::remote is implemented and Windows-only.
 
 add_subdirectory(process)
 add_subdirectory(games)
 add_subdirectory(aimbot)
+add_subdirectory(config)
 
 # Windows-only libraries; skip on non-Windows so afw::core still configures for
-# a Linux/macOS consumer. win is added before remote, which links against it.
+# a Linux/macOS consumer. Ordered by dependency: win before remote and hook,
+# hook before render, render before its two consumers.
 if(WIN32)
   add_subdirectory(win)
   add_subdirectory(remote)
+  add_subdirectory(hook)
+  add_subdirectory(render)
+  add_subdirectory(menu)
+  add_subdirectory(esp)
 endif()
