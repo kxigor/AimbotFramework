@@ -1,6 +1,5 @@
 #pragma once
 
-// clang-format off
 #include <windows.h>
 
 #include <string>

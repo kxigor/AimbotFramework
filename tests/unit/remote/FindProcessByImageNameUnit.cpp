@@ -1,10 +1,7 @@
-// clang-format off
+#include <gtest/gtest.h>
 #include <windows.h>
 
-#include <gtest/gtest.h>
-
 #include <afw/remote/remote.hpp>
-
 #include <array>
 #include <cwctype>
 #include <expected>

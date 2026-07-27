@@ -1,14 +1,18 @@
 // clang-format off
+// Order pinned by hand: tlhelp32.h is not self-contained -- it has no #include
+// of its own, yet its declarations use DWORD, WCHAR, MAX_PATH and WINAPI.
+// Sorting it alphabetically puts it ahead of windows.h, its structs then fail
+// to parse, and the errors surface far below as "no member named szExeFile".
 #include <windows.h>
 
 #include <tlhelp32.h>
+// clang-format on
 
 #include <afw/remote/error.hpp>
 #include <afw/remote/remote.hpp>
 #include <afw/win/error.hpp>
 #include <afw/win/remote_memory.hpp>
 #include <afw/win/scoped_handle.hpp>
-
 #include <cstddef>
 #include <cwchar>
 #include <expected>
@@ -96,9 +100,9 @@ LocalLoadLibraryRoutine() {
   // kernel32.dll is mapped at the same base in every process of a session, so
   // the local address of LoadLibraryW is also valid in the target process.
   // LoadLibraryW's signature differs from LPTHREAD_START_ROUTINE, but on x64
-  // the two are ABI-compatible (one pointer in, pointer-sized value out) -- that
-  // is what makes the CreateRemoteThread trick work. The type-mismatch cast is
-  // therefore intentional; silence -Wcast-function-type just for it.
+  // the two are ABI-compatible (one pointer in, pointer-sized value out) --
+  // that is what makes the CreateRemoteThread trick work. The type-mismatch
+  // cast is therefore intentional; silence -Wcast-function-type just for it.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)

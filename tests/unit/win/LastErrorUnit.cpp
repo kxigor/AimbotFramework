@@ -1,10 +1,7 @@
-// clang-format off
+#include <gtest/gtest.h>
 #include <windows.h>
 
-#include <gtest/gtest.h>
-
 #include <afw/win/error.hpp>
-
 #include <system_error>
 
 TEST(LastErrorUnit, WrapsTheThreadsLastWin32ErrorInSystemCategory) {

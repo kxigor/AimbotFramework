@@ -1,9 +1,7 @@
-// clang-format off
 #include <windows.h>
 
 #include <afw/remote/remote.hpp>
 #include <afw/win/scoped_handle.hpp>
-
 #include <array>
 #include <cstdio>
 #include <cwchar>

@@ -1,6 +1,41 @@
 #pragma once
 
-// RAII wrapper over VirtualProtect: relaxes the page protection of a memory
-// range on construction and restores the original protection on destruction.
+#include <windows.h>
 
-namespace afw::win {}
+#include <expected>
+#include <system_error>
+
+namespace afw::win {
+
+class ProtectGuard {
+  struct AdoptTag {};
+
+ public:
+  [[nodiscard]] static std::expected<ProtectGuard, std::error_code> Create(
+      HANDLE proc, LPVOID address, SIZE_T size, DWORD newProtect) noexcept;
+
+  [[nodiscard]] static ProtectGuard Adopt(HANDLE proc, LPVOID address,
+                                          SIZE_T size,
+                                          DWORD oldProtect) noexcept;
+
+  ProtectGuard(AdoptTag tag, HANDLE proc, LPVOID address, SIZE_T size,
+               DWORD oldProtect) noexcept;
+
+  ProtectGuard(const ProtectGuard&) = delete;
+  ProtectGuard& operator=(const ProtectGuard&) = delete;
+
+  ProtectGuard(ProtectGuard&&) = delete;
+  ProtectGuard& operator=(ProtectGuard&&) = delete;
+
+  ~ProtectGuard();
+
+  [[nodiscard]] std::expected<void, std::error_code> Restore() noexcept;
+
+ private:
+  HANDLE proc_{};
+  LPVOID address_{};
+  SIZE_T size_{};
+  DWORD oldProtect_{};
+};
+
+}  // namespace afw::win

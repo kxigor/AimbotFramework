@@ -1,11 +1,8 @@
-// clang-format off
-#include <windows.h>
-
 #include <gtest/gtest.h>
+#include <windows.h>
 
 #include <afw/win/remote_memory.hpp>
 #include <support/WinProbe.hpp>
-
 #include <utility>
 
 namespace {

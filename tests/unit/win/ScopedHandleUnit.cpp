@@ -1,12 +1,9 @@
-// clang-format off
+#include <gtest/gtest.h>
 #include <windows.h>
 
-#include <gtest/gtest.h>
-
 #include <afw/win/scoped_handle.hpp>
-#include <support/WinProbe.hpp>
-
 #include <string>
+#include <support/WinProbe.hpp>
 #include <utility>
 
 namespace {

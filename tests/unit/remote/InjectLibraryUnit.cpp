@@ -1,19 +1,16 @@
-// clang-format off
-#include <windows.h>
-
 #include <gtest/gtest.h>
+#include <windows.h>
 
 #include <afw/remote/error.hpp>
 #include <afw/remote/remote.hpp>
 #include <afw/win/remote_memory.hpp>
 #include <afw/win/scoped_handle.hpp>
-#include <support/WinProbe.hpp>
-
 #include <array>
 #include <cstddef>
 #include <expected>
 #include <filesystem>
 #include <string>
+#include <support/WinProbe.hpp>
 #include <system_error>
 #include <vector>
 
@@ -77,8 +74,8 @@ TEST(InjectLibraryUnit, ReportsFailureWhenTheRemoteLoadLibraryReturnsNull) {
       afw::remote::InjectLibrary(kProc.Get(), kMissingDll.c_str())};
 
   ASSERT_FALSE(kResult.has_value());
-  EXPECT_EQ(kResult.error(),
-            afw::remote::make_error_code(afw::remote::Error::LoadLibraryFailed));
+  EXPECT_EQ(kResult.error(), afw::remote::make_error_code(
+                                 afw::remote::Error::LoadLibraryFailed));
   EXPECT_EQ(&kResult.error().category(), &afw::remote::ErrorCategory());
 }
 

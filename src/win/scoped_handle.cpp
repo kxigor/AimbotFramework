@@ -1,4 +1,3 @@
-// clang-format off
 #include <windows.h>
 
 #include <afw/win/scoped_handle.hpp>
