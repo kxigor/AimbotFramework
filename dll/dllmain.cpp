@@ -5,7 +5,8 @@
 static DWORD WINAPI OnAttach(LPVOID module) {
   MessageBoxW(
       /*hWnd      = */ nullptr,
-      /*lpText    = */ L"aimbot.dll is injected and running inside this process.",
+      /*lpText    = */
+      L"aimbot.dll is injected and running inside this process.",
       /*lpCaption = */ L"AimbotFramework",
       /*uType     = */ MB_OK | MB_ICONINFORMATION);
   FreeLibraryAndExitThread(static_cast<HMODULE>(module), 0);

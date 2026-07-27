@@ -11,7 +11,7 @@
 #include <filesystem>
 #include <system_error>
 
-constexpr PCWSTR kProcName = L"notepad.exe";
+constexpr PCWSTR kTargetImageName = L"notepad.exe";
 constexpr PCWSTR kDllName = L"aimbot.dll";
 
 // Absolute path to the DLL that is staged next to this executable.
@@ -29,10 +29,10 @@ static std::filesystem::path ResolveDllPath() {
 
 int main() {
   std::expected<DWORD, std::error_code> pid{
-      afw::remote::GetPidByProcName(kProcName)};
+      afw::remote::FindProcessByImageName(kTargetImageName)};
   if (!pid) {
     std::fwprintf(stderr, L"[injector] target process not found: %ls (%hs)\n",
-                  kProcName, pid.error().message().c_str());
+                  kTargetImageName, pid.error().message().c_str());
     return 1;
   }
 
@@ -53,7 +53,7 @@ int main() {
   }
 
   std::expected<void, std::error_code> injected{
-      afw::remote::LoadDll(kProc.Get(), kDllPath.c_str())};
+      afw::remote::InjectLibrary(kProc.Get(), kDllPath.c_str())};
   if (!injected) {
     std::fwprintf(stderr, L"[injector] injection failed: %hs\n",
                   injected.error().message().c_str());
@@ -61,6 +61,6 @@ int main() {
   }
 
   std::wprintf(L"[injector] injected \"%ls\" into %ls (pid %lu)\n",
-               kDllPath.c_str(), kProcName, *pid);
+               kDllPath.c_str(), kTargetImageName, *pid);
   return 0;
 }

@@ -8,6 +8,7 @@
 
 add_library(afw_remote STATIC
   remote.cpp
+  error.cpp
 )
 add_library(afw::remote ALIAS afw_remote)
 
@@ -19,9 +20,9 @@ target_include_directories(afw_remote
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
 )
 
-# The RAII wrappers are an implementation detail here (remote.hpp exposes none
-# of them), so link afw::win privately.
-target_link_libraries(afw_remote PRIVATE afw::win)
+# remote.hpp returns an afw::win::RemoteMemory from StrDupEx, so afw::win is
+# part of this library's public interface and has to propagate to consumers.
+target_link_libraries(afw_remote PUBLIC afw::win)
 
 if(TARGET project_options)
   target_link_libraries(afw_remote PRIVATE project_options)

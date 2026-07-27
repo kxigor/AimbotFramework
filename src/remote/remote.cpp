@@ -3,6 +3,7 @@
 
 #include <tlhelp32.h>
 
+#include <afw/remote/error.hpp>
 #include <afw/remote/remote.hpp>
 #include <afw/win/error.hpp>
 #include <afw/win/remote_memory.hpp>
@@ -19,7 +20,7 @@ using afw::win::LastError;
 using afw::win::RemoteMemory;
 using afw::win::ScopedHandle;
 
-std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
+std::expected<DWORD, std::error_code> FindProcessByImageName(PCWSTR imageName) {
   const ScopedHandle kSnapshot{CreateToolhelp32Snapshot(
       /*dwFlags       = */ TH32CS_SNAPPROCESS,
       /*th32ProcessID = */ 0)};
@@ -29,18 +30,18 @@ std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
 
   PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
 
-  BOOL hasProcess{Process32FirstW(
+  BOOL hasEntry{Process32FirstW(
       /*hSnapshot = */ kSnapshot.Get(),
       /*lppe      = */ &entry)};
-  if (hasProcess == FALSE) {
+  if (hasEntry == FALSE) {
     return std::unexpected{LastError()};
   }
 
-  while (hasProcess != FALSE) {
-    if (_wcsicmp(&entry.szExeFile[0], procName) == 0) {
+  while (hasEntry != FALSE) {
+    if (_wcsicmp(&entry.szExeFile[0], imageName) == 0) {
       return entry.th32ProcessID;
     }
-    hasProcess = Process32NextW(
+    hasEntry = Process32NextW(
         /*hSnapshot = */ kSnapshot.Get(),
         /*lppe      = */ &entry);
   }
@@ -49,26 +50,26 @@ std::expected<DWORD, std::error_code> GetPidByProcName(PCWSTR procName) {
 }
 
 std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
-                                                      PCWSTR dllPath) {
-  const std::size_t kDllPathByteSize{(wcslen(dllPath) + 1) * sizeof(WCHAR)};
+                                                      PCWSTR text) {
+  const std::size_t kByteSize{(wcslen(text) + 1) * sizeof(WCHAR)};
 
-  LPVOID remoteDllPath{VirtualAllocEx(
+  LPVOID remoteText{VirtualAllocEx(
       /*hProcess         = */ proc,
       /*lpAddress        = */ nullptr,
-      /*dwSize           = */ kDllPathByteSize,
+      /*dwSize           = */ kByteSize,
       /*flAllocationType = */ MEM_COMMIT,
       /*flProtect        = */ PAGE_READWRITE)};
-  if (remoteDllPath == nullptr) {
+  if (remoteText == nullptr) {
     return std::unexpected{LastError()};
   }
 
-  RemoteMemory remoteMem{proc, remoteDllPath};
+  RemoteMemory remoteMem{proc, remoteText};
 
   const BOOL kWriteStatus{WriteProcessMemory(
       /*hProcess               = */ proc,
-      /*lpBaseAddress          = */ remoteDllPath,
-      /*lpBuffer               = */ dllPath,
-      /*nSize                  = */ kDllPathByteSize,
+      /*lpBaseAddress          = */ remoteText,
+      /*lpBuffer               = */ text,
+      /*nSize                  = */ kByteSize,
       /*lpNumberOfBytesWritten = */ nullptr)};
   if (kWriteStatus == FALSE) {
     return std::unexpected{LastError()};
@@ -77,18 +78,18 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
   return remoteMem;
 }
 
-std::expected<LPTHREAD_START_ROUTINE, std::error_code>
-GetRemoteLoadLibraryAddr() {
-  HMODULE k32{GetModuleHandleA(
-      /*lpModuleName = */ "kernel32.dll")};
-  if (k32 == nullptr) {
+static std::expected<LPTHREAD_START_ROUTINE, std::error_code>
+LocalLoadLibraryRoutine() {
+  HMODULE kernel32{GetModuleHandleW(
+      /*lpModuleName = */ L"kernel32.dll")};
+  if (kernel32 == nullptr) {
     return std::unexpected{LastError()};
   }
 
-  FARPROC loadLibraryAddr{GetProcAddress(
-      /*hModule    = */ k32,
+  FARPROC loadLibrary{GetProcAddress(
+      /*hModule    = */ kernel32,
       /*lpProcName = */ "LoadLibraryW")};
-  if (loadLibraryAddr == nullptr) {
+  if (loadLibrary == nullptr) {
     return std::unexpected{LastError()};
   }
 
@@ -101,40 +102,68 @@ GetRemoteLoadLibraryAddr() {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  return reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibraryAddr);
+  return reinterpret_cast<LPTHREAD_START_ROUTINE>(loadLibrary);
 #pragma GCC diagnostic pop
 }
 
-std::expected<void, std::error_code> LoadDll(HANDLE proc, PCWSTR dllPath) {
-  std::expected<RemoteMemory, std::error_code> remoteDllPath{
-      StrDupEx(proc, dllPath)};
-  if (!remoteDllPath) {
-    return std::unexpected{remoteDllPath.error()};
-  }
-
-  std::expected<LPTHREAD_START_ROUTINE, std::error_code> remoteLoadLibraryAddr{
-      GetRemoteLoadLibraryAddr()};
-  if (!remoteLoadLibraryAddr) {
-    return std::unexpected{remoteLoadLibraryAddr.error()};
-  }
-
-  const ScopedHandle kRemoteThread{CreateRemoteThread(
-      /*hProcess           = */ proc,
+static std::expected<DWORD, std::error_code> RunRemoteRoutine(
+    HANDLE process, LPTHREAD_START_ROUTINE routine, RemoteMemory& argument,
+    DWORD timeoutMs) {
+  const ScopedHandle kThread{CreateRemoteThread(
+      /*hProcess           = */ process,
       /*lpThreadAttributes = */ nullptr,
       /*dwStackSize        = */ 0,
-      /*lpStartAddress     = */ *remoteLoadLibraryAddr,
-      /*lpParameter        = */ remoteDllPath->Get(),
+      /*lpStartAddress     = */ routine,
+      /*lpParameter        = */ argument.Get(),
       /*dwCreationFlags    = */ 0,
       /*lpThreadId         = */ nullptr)};
-  if (!kRemoteThread) {
+  if (!kThread) {
     return std::unexpected{LastError()};
   }
 
   const DWORD kWaitResult{WaitForSingleObject(
-      /*hHandle        = */ kRemoteThread.Get(),
-      /*dwMilliseconds = */ INFINITE)};
-  if (kWaitResult == WAIT_FAILED) {
+      /*hHandle        = */ kThread.Get(),
+      /*dwMilliseconds = */ timeoutMs)};
+  if (kWaitResult != WAIT_OBJECT_0) {
+    static_cast<void>(argument.Release());
+    if (kWaitResult == WAIT_TIMEOUT) {
+      return std::unexpected{make_error_code(Error::RemoteThreadTimeout)};
+    }
     return std::unexpected{LastError()};
+  }
+
+  DWORD exitCode{0};
+  if (GetExitCodeThread(
+          /*hThread    = */ kThread.Get(),
+          /*lpExitCode = */ &exitCode) == FALSE) {
+    return std::unexpected{LastError()};
+  }
+
+  return exitCode;
+}
+
+std::expected<void, std::error_code> InjectLibrary(HANDLE process,
+                                                   PCWSTR dllPath,
+                                                   DWORD timeoutMs) {
+  std::expected<RemoteMemory, std::error_code> remotePath{
+      StrDupEx(process, dllPath)};
+  if (!remotePath) {
+    return std::unexpected{remotePath.error()};
+  }
+
+  const std::expected<LPTHREAD_START_ROUTINE, std::error_code> kLoadLibrary{
+      LocalLoadLibraryRoutine()};
+  if (!kLoadLibrary) {
+    return std::unexpected{kLoadLibrary.error()};
+  }
+
+  const std::expected<DWORD, std::error_code> kExitCode{
+      RunRemoteRoutine(process, *kLoadLibrary, *remotePath, timeoutMs)};
+  if (!kExitCode) {
+    return std::unexpected{kExitCode.error()};
+  }
+  if (*kExitCode == 0) {
+    return std::unexpected{make_error_code(Error::LoadLibraryFailed)};
   }
 
   return {};
