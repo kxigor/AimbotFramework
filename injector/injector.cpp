@@ -12,8 +12,10 @@
 constexpr PCWSTR kTargetImageName = L"notepad.exe";
 constexpr PCWSTR kDllName = L"aimbot.dll";
 
+namespace {
+
 // Absolute path to the DLL that is staged next to this executable.
-static std::filesystem::path ResolveDllPath() {
+std::filesystem::path ResolveDllPath() {
   std::array<WCHAR, MAX_PATH> exePath{};
   const DWORD kLength{GetModuleFileNameW(
       /*hModule    = */ nullptr,
@@ -24,6 +26,8 @@ static std::filesystem::path ResolveDllPath() {
   }
   return std::filesystem::path(exePath.data()).parent_path() / kDllName;
 }
+
+}  // namespace
 
 int main() {
   std::expected<DWORD, std::error_code> pid{

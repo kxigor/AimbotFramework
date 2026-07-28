@@ -53,6 +53,17 @@ namespace afw::test {
   return kQueried == sizeof(info) && info.State == MEM_FREE;
 }
 
+[[nodiscard]] inline bool RegionHasProtection(HANDLE proc, LPCVOID addr,
+                                              DWORD protect) {
+  MEMORY_BASIC_INFORMATION info{};
+  const SIZE_T kQueried{VirtualQueryEx(
+      /*hProcess  = */ proc,
+      /*lpAddress = */ addr,
+      /*lpBuffer  = */ &info,
+      /*dwLength  = */ sizeof(info))};
+  return kQueried == sizeof(info) && info.Protect == protect;
+}
+
 [[nodiscard]] inline bool RegionIsCommitted(HANDLE proc, LPCVOID addr) {
   MEMORY_BASIC_INFORMATION info{};
   const SIZE_T kQueried{VirtualQueryEx(

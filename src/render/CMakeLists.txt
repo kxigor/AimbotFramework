@@ -23,6 +23,9 @@ target_include_directories(afw_render
 target_link_libraries(afw_render PUBLIC afw::hook)
 target_link_libraries(afw_render PRIVATE afw::win)
 
+# D3D11CreateDeviceAndSwapChain lives in d3d11.dll; the probe is the only user.
+target_link_libraries(afw_render PRIVATE d3d11)
+
 if(TARGET project_options)
   target_link_libraries(afw_render PRIVATE project_options)
 endif()

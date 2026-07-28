@@ -2,7 +2,9 @@
 
 #include <afw/win/scoped_handle.hpp>
 
-static DWORD WINAPI OnAttach(LPVOID module) {
+namespace {
+
+DWORD WINAPI OnAttach(LPVOID module) {
   MessageBoxW(
       /*hWnd      = */ nullptr,
       /*lpText    = */
@@ -12,6 +14,8 @@ static DWORD WINAPI OnAttach(LPVOID module) {
   FreeLibraryAndExitThread(static_cast<HMODULE>(module), 0);
   return 0;
 }
+
+}  // namespace
 
 BOOL APIENTRY DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
   (void)reserved;

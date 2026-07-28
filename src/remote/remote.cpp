@@ -55,7 +55,7 @@ std::expected<DWORD, std::error_code> FindProcessByImageName(PCWSTR imageName) {
 
 std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
                                                       PCWSTR text) {
-  const std::size_t kByteSize{(wcslen(text) + 1) * sizeof(WCHAR)};
+  const SIZE_T kByteSize{(wcslen(text) + 1) * sizeof(WCHAR)};
 
   LPVOID remoteText{VirtualAllocEx(
       /*hProcess         = */ proc,
@@ -82,7 +82,9 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
   return remoteMem;
 }
 
-static std::expected<LPTHREAD_START_ROUTINE, std::error_code>
+namespace {
+
+std::expected<LPTHREAD_START_ROUTINE, std::error_code>
 LocalLoadLibraryRoutine() {
   HMODULE kernel32{GetModuleHandleW(
       /*lpModuleName = */ L"kernel32.dll")};
@@ -110,7 +112,7 @@ LocalLoadLibraryRoutine() {
 #pragma GCC diagnostic pop
 }
 
-static std::expected<DWORD, std::error_code> RunRemoteRoutine(
+std::expected<DWORD, std::error_code> RunRemoteRoutine(
     HANDLE process, LPTHREAD_START_ROUTINE routine, RemoteMemory& argument,
     DWORD timeoutMs) {
   const ScopedHandle kThread{CreateRemoteThread(
@@ -145,6 +147,8 @@ static std::expected<DWORD, std::error_code> RunRemoteRoutine(
 
   return exitCode;
 }
+
+}  // namespace
 
 std::expected<void, std::error_code> InjectLibrary(HANDLE process,
                                                    PCWSTR dllPath,

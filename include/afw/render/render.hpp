@@ -1,6 +1,13 @@
 #pragma once
 
-// Owns the IDXGISwapChain::Present hook along with the overlay's Direct3D 11
-// and ImGui state, and hands its users a per-frame drawing callback.
+#include <windows.h>
 
-namespace afw::render {}
+#include <expected>
+#include <system_error>
+
+namespace afw::render {
+
+[[nodiscard]] std::expected<void**, std::error_code>
+ProbeSwapChainVtable() noexcept;
+
+}  // namespace afw::render

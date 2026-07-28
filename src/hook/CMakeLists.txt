@@ -10,6 +10,7 @@
 add_library(afw_hook STATIC
   vmt_hook.cpp
   wnd_proc_hook.cpp
+  error.cpp
 )
 add_library(afw::hook ALIAS afw_hook)
 

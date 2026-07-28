@@ -22,9 +22,10 @@ Checks: >
   -bugprone-easily-swappable-parameters,
   -misc-use-internal-linkage,
   -misc-include-cleaner,
-  -misc-use-anonymous-namespace,
+  -llvm-prefer-static-over-anonymous-namespace,
   -portability-avoid-pragma-once,
   -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -hicpp-vararg
 WarningsAsErrors: '*'
 
@@ -33,16 +34,21 @@ WarningsAsErrors: '*'
 #      keep external linkage; the check would wrongly push them to `static`.
 #   -misc-include-cleaner : windows.h is an umbrella header, so every Win32 type
 #      (HINSTANCE, DWORD, LPVOID, ...) trips "no header directly provides X".
-#   -misc-use-anonymous-namespace : it contradicts
-#      llvm-prefer-static-over-anonymous-namespace, which is also enabled --
-#      one demands `static`, the other demands an anonymous namespace, and no
-#      code can satisfy both. The codebase already writes `static` for
-#      file-local helpers, so keep that and drop this check.
+#   -llvm-prefer-static-over-anonymous-namespace : it contradicts
+#      misc-use-anonymous-namespace, which is also enabled -- one demands
+#      `static`, the other an anonymous namespace, and no code satisfies both.
+#      This project puts file-local declarations in anonymous namespaces, which
+#      also covers types, where `static` is not an option.
 #   -portability-avoid-pragma-once : every header here uses #pragma once by
 #      design; -llvm-header-guard is disabled above for the same reason.
 #   -cppcoreguidelines-pro-type-vararg / -hicpp-vararg : console output uses the
 #      C stdio printf family (wide-char %ls aware); there is no non-variadic
 #      standard alternative for Unicode console output on Windows.
+#   -cppcoreguidelines-pro-bounds-pointer-arithmetic : indexing a foreign
+#      structure by offset is the primary operation here -- vtable slots,
+#      module bases, pattern scans. The bounds are defined by the layout being
+#      patched, not by anything expressible in our type system, so the check
+#      fires on every line that does the actual work.
 
 CheckOptions:
   - key: readability-function-size.LineThreshold
@@ -63,6 +69,12 @@ CheckOptions:
     value: 'CamelCase'
   - key: readability-identifier-naming.MemberCase
     value: 'camelBack'
+  - key: readability-identifier-naming.ConstantMemberCase
+    value: 'CamelCase'
+  - key: readability-identifier-naming.ConstantMemberPrefix
+    value: 'k'
+  - key: readability-identifier-naming.ConstantMemberSuffix
+    value: '_'
   - key: readability-identifier-naming.MethodCase
     value: 'CamelCase'
   - key: readability-identifier-naming.NamespaceCase
