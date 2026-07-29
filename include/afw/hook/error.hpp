@@ -9,6 +9,8 @@ namespace afw::hook {
 enum class Error : std::uint8_t {
   HookAlreadyApplied = 1,
   HookNotApplied = 2,
+  DetourNotSet = 3,
+  SlotNotReadable = 4,
 };
 
 [[nodiscard]] const std::error_category& ErrorCategory();

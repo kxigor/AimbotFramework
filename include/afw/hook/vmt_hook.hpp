@@ -1,13 +1,21 @@
 #pragma once
 
+#include <bit>
 #include <cstddef>
 #include <expected>
 #include <system_error>
+#include <type_traits>
 
 namespace afw::hook {
+
+template <typename Fn>
+concept SlotFunction =
+    std::is_pointer_v<Fn> && std::is_function_v<std::remove_pointer_t<Fn>> &&
+    sizeof(Fn) == sizeof(void*);
+
 class VmtHook {
  public:
-  VmtHook(void** vtable, std::size_t sourcePos, void* detour) noexcept;
+  VmtHook(void** vtable, std::size_t index) noexcept;
 
   VmtHook(const VmtHook&) = delete;
   VmtHook& operator=(const VmtHook&) = delete;
@@ -17,19 +25,32 @@ class VmtHook {
 
   ~VmtHook();
 
+  template <SlotFunction Fn>
+  [[nodiscard]] std::expected<void, std::error_code> SetDetour(
+      Fn detour) noexcept {
+    return SetDetourRaw(std::bit_cast<void*>(detour));
+  }
+
+  template <SlotFunction Fn>
+  [[nodiscard]] Fn Original() const noexcept {
+    return std::bit_cast<Fn>(kOriginal_);
+  }
+
   [[nodiscard]] std::expected<void, std::error_code> Enable() noexcept;
   [[nodiscard]] std::expected<void, std::error_code> Disable() noexcept;
 
  private:
-  [[nodiscard]] std::expected<void*, std::error_code> SwapSlot(
+  [[nodiscard]] std::expected<void, std::error_code> SetDetourRaw(
+      void* detour) noexcept;
+
+  [[nodiscard]] std::expected<void, std::error_code> SwapSlot(
       void* value) noexcept;
 
   bool isEnabled_{false};
-  void* original_{nullptr};
+  void* detour_{nullptr};
 
-  void** vtable_{nullptr};
-
-  const std::size_t kSourcePos_{};
-  void* const kDetour_{nullptr};
+  void** const kSlot_{nullptr};
+  void* const kOriginal_{nullptr};
 };
+
 }  // namespace afw::hook
