@@ -65,14 +65,17 @@ set(MSVC_RELEASE /O2 /Oi /Gy /DNDEBUG /Zi /GL)
 
 # --- GCC/Clang Linker ---
 if(WIN32)
-  # PE/COFF hardening understood by the MinGW/LLD linkers. --high-entropy-va
-  # requires --dynamicbase and a 64-bit image (UCRT64 x86_64) -> ASLR + top-of
-  # -address-space entropy + DEP.
+  # PE/COFF hardening understood by the MinGW/LLD linkers: ASLR + DEP.
   set(GCC_BASE_LINK
     -Wl,--dynamicbase
     -Wl,--nxcompat
-    -Wl,--high-entropy-va
   )
+
+  # --high-entropy-va needs a 64-bit image; on i686 it is rejected. The 32-bit
+  # build is the one that targets the game, so this has to stay conditional.
+  if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+    list(APPEND GCC_BASE_LINK -Wl,--high-entropy-va)
+  endif()
 else()
   # ELF hardening: PIE + full RELRO (lazy binding disabled).
   set(GCC_BASE_LINK

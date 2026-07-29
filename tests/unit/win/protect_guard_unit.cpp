@@ -3,14 +3,14 @@
 
 #include <afw/win/protect_guard.hpp>
 #include <expected>
-#include <support/WinProbe.hpp>
+#include <support/win_probe.hpp>
 #include <system_error>
 
 namespace {
 
 constexpr SIZE_T kProbeSize{4096};
 
-class ProtectGuardTest : public ::testing::Test {
+class ProtectGuardUnit : public ::testing::Test {
  protected:
   void SetUp() override {
     page_ = VirtualAlloc(
@@ -37,7 +37,7 @@ class ProtectGuardTest : public ::testing::Test {
 
 }  // namespace
 
-TEST_F(ProtectGuardTest, CreateRelaxesTheProtection) {
+TEST_F(ProtectGuardUnit, CreateRelaxesTheProtection) {
   const std::expected<afw::win::ProtectGuard, std::error_code> kGuard{
       afw::win::ProtectGuard::Create(GetCurrentProcess(), page_, kProbeSize,
                                      PAGE_READWRITE)};
@@ -47,7 +47,7 @@ TEST_F(ProtectGuardTest, CreateRelaxesTheProtection) {
                                              PAGE_READWRITE));
 }
 
-TEST_F(ProtectGuardTest, DestructorRestoresTheProtection) {
+TEST_F(ProtectGuardUnit, DestructorRestoresTheProtection) {
   {
     const std::expected<afw::win::ProtectGuard, std::error_code> kGuard{
         afw::win::ProtectGuard::Create(GetCurrentProcess(), page_, kProbeSize,
@@ -59,7 +59,7 @@ TEST_F(ProtectGuardTest, DestructorRestoresTheProtection) {
                                              PAGE_READONLY));
 }
 
-TEST_F(ProtectGuardTest, RestoreReportsSuccessAndPutsTheProtectionBack) {
+TEST_F(ProtectGuardUnit, RestoreReportsSuccessAndPutsTheProtectionBack) {
   std::expected<afw::win::ProtectGuard, std::error_code> guard{
       afw::win::ProtectGuard::Create(GetCurrentProcess(), page_, kProbeSize,
                                      PAGE_READWRITE)};
@@ -72,7 +72,7 @@ TEST_F(ProtectGuardTest, RestoreReportsSuccessAndPutsTheProtectionBack) {
                                              PAGE_READONLY));
 }
 
-TEST_F(ProtectGuardTest, RestoreIsIdempotent) {
+TEST_F(ProtectGuardUnit, RestoreIsIdempotent) {
   std::expected<afw::win::ProtectGuard, std::error_code> guard{
       afw::win::ProtectGuard::Create(GetCurrentProcess(), page_, kProbeSize,
                                      PAGE_READWRITE)};
@@ -80,12 +80,12 @@ TEST_F(ProtectGuardTest, RestoreIsIdempotent) {
   ASSERT_TRUE(guard->Restore().has_value());
 
   const DWORD kTightened{PAGE_NOACCESS};
-  DWORD ignored{0};
+  DWORD previous{};
   ASSERT_NE(VirtualProtect(
                 /*lpAddress      = */ page_,
                 /*dwSize         = */ kProbeSize,
                 /*flNewProtect   = */ kTightened,
-                /*lpflOldProtect = */ &ignored),
+                /*lpflOldProtect = */ &previous),
             FALSE);
 
   EXPECT_TRUE(guard->Restore().has_value());
@@ -93,8 +93,8 @@ TEST_F(ProtectGuardTest, RestoreIsIdempotent) {
       afw::test::RegionHasProtection(GetCurrentProcess(), page_, kTightened));
 }
 
-TEST_F(ProtectGuardTest, AdoptRestoresOnDestruction) {
-  DWORD previous{0};
+TEST_F(ProtectGuardUnit, AdoptRestoresOnDestruction) {
+  DWORD previous{};
   ASSERT_NE(VirtualProtect(
                 /*lpAddress      = */ page_,
                 /*dwSize         = */ kProbeSize,
@@ -113,21 +113,21 @@ TEST_F(ProtectGuardTest, AdoptRestoresOnDestruction) {
                                              PAGE_READONLY));
 }
 
-TEST_F(ProtectGuardTest, CreateReportsTheWin32ErrorForAnUnmappedAddress) {
-  LPVOID unmapped{VirtualAlloc(
+TEST_F(ProtectGuardUnit, CreateReportsTheWin32ErrorForAnUnmappedAddress) {
+  const LPVOID kUnmapped{VirtualAlloc(
       /*lpAddress        = */ nullptr,
       /*dwSize           = */ kProbeSize,
       /*flAllocationType = */ MEM_RESERVE,
       /*flProtect        = */ PAGE_NOACCESS)};
-  ASSERT_NE(unmapped, nullptr);
+  ASSERT_NE(kUnmapped, nullptr);
   ASSERT_NE(VirtualFree(
-                /*lpAddress  = */ unmapped,
+                /*lpAddress  = */ kUnmapped,
                 /*dwSize     = */ 0,
                 /*dwFreeType = */ MEM_RELEASE),
             FALSE);
 
   const std::expected<afw::win::ProtectGuard, std::error_code> kGuard{
-      afw::win::ProtectGuard::Create(GetCurrentProcess(), unmapped, kProbeSize,
+      afw::win::ProtectGuard::Create(GetCurrentProcess(), kUnmapped, kProbeSize,
                                      PAGE_READWRITE)};
 
   ASSERT_FALSE(kGuard.has_value());

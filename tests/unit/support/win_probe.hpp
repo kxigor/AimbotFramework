@@ -7,8 +7,8 @@
 namespace afw::test {
 
 [[nodiscard]] inline bool HandleIsClosed(HANDLE handle) {
-  DWORD flags{0};
-  SetLastError(ERROR_SUCCESS);
+  DWORD flags{};
+  SetLastError(/*dwErrCode = */ ERROR_SUCCESS);
   if (GetHandleInformation(
           /*hObject   = */ handle,
           /*lpdwFlags = */ &flags) != FALSE) {

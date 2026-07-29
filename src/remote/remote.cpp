@@ -13,10 +13,10 @@
 #include <afw/win/error.hpp>
 #include <afw/win/remote_memory.hpp>
 #include <afw/win/scoped_handle.hpp>
-#include <cstddef>
 #include <cwchar>
 #include <expected>
 #include <system_error>
+#include <tuple>
 
 namespace afw::remote {
 
@@ -84,7 +84,7 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
 
 namespace {
 
-std::expected<LPTHREAD_START_ROUTINE, std::error_code>
+[[nodiscard]] std::expected<LPTHREAD_START_ROUTINE, std::error_code>
 LocalLoadLibraryRoutine() {
   HMODULE kernel32{GetModuleHandleW(
       /*lpModuleName = */ L"kernel32.dll")};
@@ -112,11 +112,11 @@ LocalLoadLibraryRoutine() {
 #pragma GCC diagnostic pop
 }
 
-std::expected<DWORD, std::error_code> RunRemoteRoutine(
-    HANDLE process, LPTHREAD_START_ROUTINE routine, RemoteMemory& argument,
+[[nodiscard]] std::expected<DWORD, std::error_code> RunRemoteRoutine(
+    HANDLE proc, LPTHREAD_START_ROUTINE routine, RemoteMemory& argument,
     DWORD timeoutMs) {
   const ScopedHandle kThread{CreateRemoteThread(
-      /*hProcess           = */ process,
+      /*hProcess           = */ proc,
       /*lpThreadAttributes = */ nullptr,
       /*dwStackSize        = */ 0,
       /*lpStartAddress     = */ routine,
@@ -131,14 +131,14 @@ std::expected<DWORD, std::error_code> RunRemoteRoutine(
       /*hHandle        = */ kThread.Get(),
       /*dwMilliseconds = */ timeoutMs)};
   if (kWaitResult != WAIT_OBJECT_0) {
-    static_cast<void>(argument.Release());
+    std::ignore = argument.Release();
     if (kWaitResult == WAIT_TIMEOUT) {
       return std::unexpected{make_error_code(Error::RemoteThreadTimeout)};
     }
     return std::unexpected{LastError()};
   }
 
-  DWORD exitCode{0};
+  DWORD exitCode{};
   if (GetExitCodeThread(
           /*hThread    = */ kThread.Get(),
           /*lpExitCode = */ &exitCode) == FALSE) {
@@ -150,11 +150,10 @@ std::expected<DWORD, std::error_code> RunRemoteRoutine(
 
 }  // namespace
 
-std::expected<void, std::error_code> InjectLibrary(HANDLE process,
-                                                   PCWSTR dllPath,
+std::expected<void, std::error_code> InjectLibrary(HANDLE proc, PCWSTR dllPath,
                                                    DWORD timeoutMs) {
   std::expected<RemoteMemory, std::error_code> remotePath{
-      StrDupEx(process, dllPath)};
+      StrDupEx(proc, dllPath)};
   if (!remotePath) {
     return std::unexpected{remotePath.error()};
   }
@@ -166,7 +165,7 @@ std::expected<void, std::error_code> InjectLibrary(HANDLE process,
   }
 
   const std::expected<DWORD, std::error_code> kExitCode{
-      RunRemoteRoutine(process, *kLoadLibrary, *remotePath, timeoutMs)};
+      RunRemoteRoutine(proc, *kLoadLibrary, *remotePath, timeoutMs)};
   if (!kExitCode) {
     return std::unexpected{kExitCode.error()};
   }

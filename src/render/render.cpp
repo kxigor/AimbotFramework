@@ -14,7 +14,7 @@ namespace {
 constexpr PCWSTR kProbeClassName{L"afw_swap_chain_probe"};
 constexpr UINT kProbeExtent{1};
 
-std::expected<HWND, std::error_code> CreateProbeWindow(
+[[nodiscard]] std::expected<HWND, std::error_code> CreateProbeWindow(
     HINSTANCE instance) noexcept {
   const WNDCLASSEXW kClass{.cbSize = sizeof(WNDCLASSEXW),
                            .lpfnWndProc = DefWindowProcW,
@@ -57,7 +57,8 @@ void DestroyProbeWindow(HWND window, HINSTANCE instance) noexcept {
       /*hInstance   = */ instance);
 }
 
-std::expected<void**, std::error_code> ReadVtable(HWND window) noexcept {
+[[nodiscard]] std::expected<void**, std::error_code> ReadVtable(
+    HWND window) noexcept {
   // clang-format off
   const DXGI_SWAP_CHAIN_DESC kDesc{
       .BufferDesc   = {.Width  = kProbeExtent,

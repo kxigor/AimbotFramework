@@ -2,14 +2,14 @@
 #include <windows.h>
 
 #include <afw/win/remote_memory.hpp>
-#include <support/WinProbe.hpp>
+#include <support/win_probe.hpp>
 #include <utility>
 
 namespace {
 
 constexpr SIZE_T kProbeSize{4096};
 
-class RemoteMemoryTest : public ::testing::Test {
+class RemoteMemoryUnit : public ::testing::Test {
  protected:
   void SetUp() override {
     proc_ = OpenProcess(
@@ -40,14 +40,14 @@ class RemoteMemoryTest : public ::testing::Test {
 
 }  // namespace
 
-TEST_F(RemoteMemoryTest, DefaultConstructedOwnsNothing) {
+TEST_F(RemoteMemoryUnit, DefaultConstructedOwnsNothing) {
   const afw::win::RemoteMemory kMem{};
 
   EXPECT_EQ(kMem.Get(), nullptr);
   EXPECT_FALSE(static_cast<bool>(kMem));
 }
 
-TEST_F(RemoteMemoryTest, DestructorReleasesTheAllocation) {
+TEST_F(RemoteMemoryUnit, DestructorReleasesTheAllocation) {
   const LPVOID kAddr{Allocate()};
   ASSERT_NE(kAddr, nullptr);
 
@@ -61,7 +61,7 @@ TEST_F(RemoteMemoryTest, DestructorReleasesTheAllocation) {
   EXPECT_TRUE(afw::test::RegionIsFree(proc_, kAddr));
 }
 
-TEST_F(RemoteMemoryTest, ReleaseKeepsTheAllocationAlive) {
+TEST_F(RemoteMemoryUnit, ReleaseKeepsTheAllocationAlive) {
   const LPVOID kAddr{Allocate()};
   ASSERT_NE(kAddr, nullptr);
 
@@ -82,7 +82,7 @@ TEST_F(RemoteMemoryTest, ReleaseKeepsTheAllocationAlive) {
             FALSE);
 }
 
-TEST_F(RemoteMemoryTest, MoveConstructionTransfersOwnership) {
+TEST_F(RemoteMemoryUnit, MoveConstructionTransfersOwnership) {
   const LPVOID kAddr{Allocate()};
   ASSERT_NE(kAddr, nullptr);
 
@@ -99,7 +99,7 @@ TEST_F(RemoteMemoryTest, MoveConstructionTransfersOwnership) {
   EXPECT_TRUE(afw::test::RegionIsFree(proc_, kAddr));
 }
 
-TEST_F(RemoteMemoryTest, MoveAssignmentReleasesTheReplacedAllocation) {
+TEST_F(RemoteMemoryUnit, MoveAssignmentReleasesTheReplacedAllocation) {
   const LPVOID kOld{Allocate()};
   ASSERT_NE(kOld, nullptr);
   const LPVOID kNew{Allocate()};
@@ -121,7 +121,7 @@ TEST_F(RemoteMemoryTest, MoveAssignmentReleasesTheReplacedAllocation) {
   EXPECT_TRUE(afw::test::RegionIsFree(proc_, kNew));
 }
 
-TEST_F(RemoteMemoryTest, ResetWithTheSameAddressDoesNotFree) {
+TEST_F(RemoteMemoryUnit, ResetWithTheSameAddressDoesNotFree) {
   const LPVOID kAddr{Allocate()};
   ASSERT_NE(kAddr, nullptr);
 
@@ -136,7 +136,7 @@ TEST_F(RemoteMemoryTest, ResetWithTheSameAddressDoesNotFree) {
   EXPECT_TRUE(afw::test::RegionIsFree(proc_, kAddr));
 }
 
-TEST_F(RemoteMemoryTest, ResetReleasesTheOldAllocation) {
+TEST_F(RemoteMemoryUnit, ResetReleasesTheOldAllocation) {
   const LPVOID kOld{Allocate()};
   ASSERT_NE(kOld, nullptr);
   const LPVOID kNew{Allocate()};

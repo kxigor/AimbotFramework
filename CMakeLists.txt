@@ -52,6 +52,21 @@ if(PROJECT_IS_TOP_LEVEL)
   set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 endif()
 
+# A preset that targets one architecture states its pointer size here, so that
+# configuring it from the wrong MSYS2 shell is an error rather than a build of
+# the other architecture into a directory named for this one.
+if(AFW_TARGET_POINTER_SIZE AND
+   NOT CMAKE_SIZEOF_VOID_P EQUAL AFW_TARGET_POINTER_SIZE)
+  math(EXPR AFW_WANTED_BITS "${AFW_TARGET_POINTER_SIZE} * 8")
+  math(EXPR AFW_FOUND_BITS "${CMAKE_SIZEOF_VOID_P} * 8")
+  message(FATAL_ERROR
+    "This preset targets ${AFW_WANTED_BITS}-bit but ${CMAKE_CXX_COMPILER} "
+    "produces ${AFW_FOUND_BITS}-bit code.\n"
+    "Open the matching MSYS2 shell (MINGW32 for 32-bit, UCRT64 for 64-bit) "
+    "and configure again."
+  )
+endif()
+
 # =========================================================
 # 3. DEV-ONLY MACHINERY (skipped for subproject consumers)
 # =========================================================

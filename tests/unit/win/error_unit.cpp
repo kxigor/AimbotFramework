@@ -4,8 +4,8 @@
 #include <afw/win/error.hpp>
 #include <system_error>
 
-TEST(LastErrorUnit, WrapsTheThreadsLastWin32ErrorInSystemCategory) {
-  SetLastError(ERROR_ACCESS_DENIED);
+TEST(WinErrorUnit, WrapsTheThreadsLastWin32ErrorInSystemCategory) {
+  SetLastError(/*dwErrCode = */ ERROR_ACCESS_DENIED);
 
   const std::error_code kCode{afw::win::LastError()};
 
@@ -13,8 +13,8 @@ TEST(LastErrorUnit, WrapsTheThreadsLastWin32ErrorInSystemCategory) {
   EXPECT_EQ(&kCode.category(), &std::system_category());
 }
 
-TEST(LastErrorUnit, ReportsSuccessAsAFalsyCode) {
-  SetLastError(ERROR_SUCCESS);
+TEST(WinErrorUnit, ReportsSuccessAsAFalsyCode) {
+  SetLastError(/*dwErrCode = */ ERROR_SUCCESS);
 
   EXPECT_FALSE(static_cast<bool>(afw::win::LastError()));
 }

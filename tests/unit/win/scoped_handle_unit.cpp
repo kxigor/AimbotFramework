@@ -3,7 +3,7 @@
 
 #include <afw/win/scoped_handle.hpp>
 #include <string>
-#include <support/WinProbe.hpp>
+#include <support/win_probe.hpp>
 #include <utility>
 
 namespace {

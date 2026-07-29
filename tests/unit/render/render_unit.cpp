@@ -10,10 +10,10 @@ namespace {
 
 constexpr std::size_t kPresentSlot{8};
 
-[[nodiscard]] LPVOID AllocationBaseOf(LPCVOID address) {
+[[nodiscard]] LPVOID AllocationBaseOf(LPCVOID addr) {
   MEMORY_BASIC_INFORMATION info{};
   const SIZE_T kQueried{VirtualQuery(
-      /*lpAddress = */ address,
+      /*lpAddress = */ addr,
       /*lpBuffer  = */ &info,
       /*dwLength  = */ sizeof(info))};
   return kQueried == sizeof(info) ? info.AllocationBase : nullptr;
@@ -21,19 +21,19 @@ constexpr std::size_t kPresentSlot{8};
 
 }  // namespace
 
-TEST(ProbeSwapChainVtableUnit, ReturnsATableThatLivesInsideDxgi) {
+TEST(RenderUnit, ReturnsATableThatLivesInsideDxgi) {
   const std::expected<void**, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();
   ASSERT_NE(*kVtable, nullptr);
 
-  const HMODULE kDxgi{GetModuleHandleW(L"dxgi.dll")};
+  const HMODULE kDxgi{GetModuleHandleW(/*lpModuleName = */ L"dxgi.dll")};
   ASSERT_NE(kDxgi, nullptr);
 
   EXPECT_EQ(AllocationBaseOf(*kVtable), static_cast<LPVOID>(kDxgi));
 }
 
-TEST(ProbeSwapChainVtableUnit, PresentSlotPointsAtCodeInsideDxgi) {
+TEST(RenderUnit, PresentSlotPointsAtCodeInsideDxgi) {
   const std::expected<void**, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();
@@ -41,13 +41,13 @@ TEST(ProbeSwapChainVtableUnit, PresentSlotPointsAtCodeInsideDxgi) {
   void* const kPresent{(*kVtable)[kPresentSlot]};
   ASSERT_NE(kPresent, nullptr);
 
-  const HMODULE kDxgi{GetModuleHandleW(L"dxgi.dll")};
+  const HMODULE kDxgi{GetModuleHandleW(/*lpModuleName = */ L"dxgi.dll")};
   ASSERT_NE(kDxgi, nullptr);
 
   EXPECT_EQ(AllocationBaseOf(kPresent), static_cast<LPVOID>(kDxgi));
 }
 
-TEST(ProbeSwapChainVtableUnit, TwoProbesAgreeOnTheAddress) {
+TEST(RenderUnit, TwoProbesAgreeOnTheAddress) {
   // The whole design rests on the table belonging to the class rather than to
   // the object. If that ever stops holding, hooking a throwaway swap chain
   // would no longer affect the game's, and this is what would notice.
@@ -62,7 +62,7 @@ TEST(ProbeSwapChainVtableUnit, TwoProbesAgreeOnTheAddress) {
   EXPECT_EQ(*kFirst, *kSecond);
 }
 
-TEST(ProbeSwapChainVtableUnit, LeavesNoProbeWindowClassBehind) {
+TEST(RenderUnit, LeavesNoProbeWindowClassBehind) {
   const std::expected<void**, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();

@@ -9,13 +9,13 @@
 #include <filesystem>
 #include <system_error>
 
-constexpr PCWSTR kTargetImageName = L"notepad.exe";
-constexpr PCWSTR kDllName = L"aimbot.dll";
-
 namespace {
 
+constexpr PCWSTR kTargetImageName{L"notepad.exe"};
+constexpr PCWSTR kDllName{L"aimbot.dll"};
+
 // Absolute path to the DLL that is staged next to this executable.
-std::filesystem::path ResolveDllPath() {
+[[nodiscard]] std::filesystem::path ResolveDllPath() {
   std::array<WCHAR, MAX_PATH> exePath{};
   const DWORD kLength{GetModuleFileNameW(
       /*hModule    = */ nullptr,
@@ -24,24 +24,24 @@ std::filesystem::path ResolveDllPath() {
   if (kLength == 0 || kLength >= static_cast<DWORD>(MAX_PATH)) {
     return {};
   }
-  return std::filesystem::path(exePath.data()).parent_path() / kDllName;
+  return std::filesystem::path{exePath.data()}.parent_path() / kDllName;
 }
 
 }  // namespace
 
 int main() {
-  std::expected<DWORD, std::error_code> pid{
+  const std::expected<DWORD, std::error_code> kPid{
       afw::remote::FindProcessByImageName(kTargetImageName)};
-  if (!pid) {
+  if (!kPid) {
     std::fwprintf(stderr, L"[injector] target process not found: %ls (%hs)\n",
-                  kTargetImageName, pid.error().message().c_str());
+                  kTargetImageName, kPid.error().message().c_str());
     return 1;
   }
 
   const afw::win::ScopedHandle kProc{OpenProcess(
       /*dwDesiredAccess = */ PROCESS_ALL_ACCESS,
       /*bInheritHandle  = */ FALSE,
-      /*dwProcessId     = */ *pid)};
+      /*dwProcessId     = */ *kPid)};
   if (!kProc) {
     std::fwprintf(stderr, L"[injector] OpenProcess failed (error %lu)\n",
                   GetLastError());
@@ -54,15 +54,15 @@ int main() {
     return 1;
   }
 
-  std::expected<void, std::error_code> injected{
+  const std::expected<void, std::error_code> kInjected{
       afw::remote::InjectLibrary(kProc.Get(), kDllPath.c_str())};
-  if (!injected) {
+  if (!kInjected) {
     std::fwprintf(stderr, L"[injector] injection failed: %hs\n",
-                  injected.error().message().c_str());
+                  kInjected.error().message().c_str());
     return 1;
   }
 
   std::wprintf(L"[injector] injected \"%ls\" into %ls (pid %lu)\n",
-               kDllPath.c_str(), kTargetImageName, *pid);
+               kDllPath.c_str(), kTargetImageName, *kPid);
   return 0;
 }

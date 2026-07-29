@@ -33,7 +33,7 @@ namespace {
 
 }  // namespace
 
-TEST(FindProcessByImageNameUnit, FindsThisProcessByItsOwnImageName) {
+TEST(RemoteLookupUnit, FindsThisProcessByItsOwnImageName) {
   const std::wstring kName{OwnImageName()};
   ASSERT_FALSE(kName.empty());
 
@@ -44,7 +44,7 @@ TEST(FindProcessByImageNameUnit, FindsThisProcessByItsOwnImageName) {
   EXPECT_EQ(*kResult, GetCurrentProcessId());
 }
 
-TEST(FindProcessByImageNameUnit, MatchesTheImageNameCaseInsensitively) {
+TEST(RemoteLookupUnit, MatchesTheImageNameCaseInsensitively) {
   const std::wstring kShouted{ToUpper(OwnImageName())};
   ASSERT_FALSE(kShouted.empty());
 
@@ -55,7 +55,7 @@ TEST(FindProcessByImageNameUnit, MatchesTheImageNameCaseInsensitively) {
   EXPECT_EQ(*kResult, GetCurrentProcessId());
 }
 
-TEST(FindProcessByImageNameUnit, ReportsNoSuchProcessForAnUnknownName) {
+TEST(RemoteLookupUnit, ReportsNoSuchProcessForAnUnknownName) {
   constexpr PCWSTR kAbsentName{L"afw:no*such<process>.exe"};
 
   const std::expected<DWORD, std::error_code> kResult{

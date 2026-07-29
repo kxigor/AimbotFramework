@@ -30,6 +30,19 @@
       }
     },
     {
+      "name": "dev-debug-x86",
+      "displayName": "Debug + Tests + DLL (GCC i686)",
+      "description": "32-bit build; run it from an MSYS2 MINGW32 shell. Far Cry 3 is a 32-bit process, so the injector and the DLL that ship must come from here. No toolchain paths are pinned: CMake picks up both the compiler and the 32-bit GTest from PATH, the same way dev-debug does for the 64-bit environment. AFW_TARGET_POINTER_SIZE makes a wrong shell a configure error instead of a silent 64-bit build.",
+      "inherits": ["base"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "SANITIZER_MODE": "None",
+        "AFW_TARGET_POINTER_SIZE": "4",
+        "AFW_ENABLE_FORMAT_CHECK": "OFF",
+        "AFW_ENABLE_TIDY_CHECK": "OFF"
+      }
+    },
+    {
       "name": "dev-debug-asan",
       "displayName": "Debug + Tests + AddressSanitizer (Clang)",
       "description": "ASan+UBSan. On Windows only Clang ships the ASan runtime, so this preset forces clang++.",
@@ -89,6 +102,7 @@
 
   "buildPresets": [
     { "name": "dev-debug", "configurePreset": "dev-debug" },
+    { "name": "dev-debug-x86", "configurePreset": "dev-debug-x86" },
     { "name": "dev-debug-asan", "configurePreset": "dev-debug-asan" },
     { "name": "dev-debug-ubsan", "configurePreset": "dev-debug-ubsan" },
     { "name": "ci-coverage", "configurePreset": "ci-coverage" },
@@ -100,6 +114,12 @@
     {
       "name": "dev-debug",
       "configurePreset": "dev-debug",
+      "output": { "outputOnFailure": true },
+      "execution": { "stopOnFailure": true }
+    },
+    {
+      "name": "dev-debug-x86",
+      "configurePreset": "dev-debug-x86",
       "output": { "outputOnFailure": true },
       "execution": { "stopOnFailure": true }
     },

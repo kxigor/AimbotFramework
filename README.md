@@ -92,12 +92,12 @@ point.
 Far Cry 3's Direct3D 11 executable (`bin/farcry3_d3d11.exe`) is **32-bit**, and a
 64-bit DLL cannot be loaded into a 32-bit process. `aimbot.dll` and
 `injector.exe` therefore have to be built for x86 with an `i686-w64-mingw32`
-toolchain (MSYS2 **MINGW32**); the library code itself is unaffected. That
-toolchain branch is not wired into the presets yet.
+toolchain (MSYS2 **MINGW32**); the library code itself is unaffected, and the
+whole test suite passes on both architectures.
 
-One build setting does not survive the switch: `-Wl,--high-entropy-va` in
-`cmake/ProjectOptions.cmake` requires a 64-bit image, so it has to be dropped for
-the x86 targets. `--dynamicbase` and `--nxcompat` still apply.
+`-Wl,--high-entropy-va` requires a 64-bit image, so `cmake/ProjectOptions.cmake`
+applies it only when `CMAKE_SIZEOF_VOID_P` is 8. `--dynamicbase` and
+`--nxcompat` apply to both.
 
 To confirm on your own copy, read `IMAGE_FILE_HEADER.Machine` from the PE header:
 `0x014C` is x86, `0x8664` is x64.
@@ -116,6 +116,30 @@ ctest --preset dev-debug
 cmake --preset ci-release
 cmake --build --preset ci-release
 ```
+
+## Build 32-bit (from an MSYS2 **MINGW32** shell)
+
+```sh
+pacman -S --needed mingw-w64-i686-gcc mingw-w64-i686-gtest
+
+cmake --preset dev-debug-x86
+cmake --build --preset dev-debug-x86
+ctest --preset dev-debug-x86
+```
+
+No toolchain paths are pinned anywhere: CMake picks up both the compiler and the
+32-bit GTest from the shell's `PATH`, exactly as `dev-debug` does for the 64-bit
+environment, so this works wherever MSYS2 is installed. `cmake` and `ninja` from
+any environment will do — they are architecture-independent build drivers.
+
+Running a preset from the wrong shell is a configure error rather than a silent
+build of the other architecture: `dev-debug-x86` declares
+`AFW_TARGET_POINTER_SIZE` and the top-level `CMakeLists.txt` checks it against
+the compiler CMake actually found.
+
+The lint gate (`FormatCheck`, `TidyCheck`) is registered only in the 64-bit
+build; clang-format and clang-tidy do not depend on the target architecture, so
+running them twice would only cost time.
 
 The DLL output is `aimbot.dll` (no `lib` prefix), with the MinGW runtime linked
 statically so it does not need MSYS2 runtime DLLs on the host's search path, and

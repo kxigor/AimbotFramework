@@ -6,7 +6,7 @@
 #include <cstddef>
 #include <cstring>
 #include <expected>
-#include <support/WinProbe.hpp>
+#include <support/win_probe.hpp>
 #include <system_error>
 
 namespace {
@@ -33,7 +33,7 @@ int DetourFn() { return 2; }
   return result;
 }
 
-class VmtHookTest : public ::testing::Test {
+class VmtHookUnit : public ::testing::Test {
  protected:
   void SetUp() override {
     page_ = VirtualAlloc(
@@ -49,7 +49,7 @@ class VmtHookTest : public ::testing::Test {
     // A real vtable lives in .rdata, so make the probe read-only too --
     // otherwise ProtectGuard would have nothing to do and the test would pass
     // even if the guard were removed.
-    DWORD previous{0};
+    DWORD previous{};
     ASSERT_NE(VirtualProtect(
                   /*lpAddress      = */ page_,
                   /*dwSize         = */ kTableSize,
@@ -75,7 +75,7 @@ class VmtHookTest : public ::testing::Test {
 
 }  // namespace
 
-TEST_F(VmtHookTest, EnableRedirectsTheSlotToTheDetour) {
+TEST_F(VmtHookUnit, EnableRedirectsTheSlotToTheDetour) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
   ASSERT_EQ(CallSlot(), 1);
 
@@ -85,7 +85,7 @@ TEST_F(VmtHookTest, EnableRedirectsTheSlotToTheDetour) {
   EXPECT_EQ(CallSlot(), 2);
 }
 
-TEST_F(VmtHookTest, EnableLeavesThePageProtectionAsItFoundIt) {
+TEST_F(VmtHookUnit, EnableLeavesThePageProtectionAsItFoundIt) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
 
   ASSERT_TRUE(hook.Enable().has_value());
@@ -94,7 +94,7 @@ TEST_F(VmtHookTest, EnableLeavesThePageProtectionAsItFoundIt) {
                                              PAGE_READONLY));
 }
 
-TEST_F(VmtHookTest, DisableRestoresTheOriginal) {
+TEST_F(VmtHookUnit, DisableRestoresTheOriginal) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
   ASSERT_TRUE(hook.Enable().has_value());
   ASSERT_EQ(CallSlot(), 2);
@@ -105,7 +105,7 @@ TEST_F(VmtHookTest, DisableRestoresTheOriginal) {
   EXPECT_EQ(CallSlot(), 1);
 }
 
-TEST_F(VmtHookTest, DestructorRestoresTheOriginal) {
+TEST_F(VmtHookUnit, DestructorRestoresTheOriginal) {
   {
     afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
     ASSERT_TRUE(hook.Enable().has_value());
@@ -115,20 +115,20 @@ TEST_F(VmtHookTest, DestructorRestoresTheOriginal) {
   EXPECT_EQ(CallSlot(), 1);
 }
 
-TEST_F(VmtHookTest, EnableTwiceReportsHookAlreadyApplied) {
+TEST_F(VmtHookUnit, EnableTwiceReportsHookAlreadyApplied) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
   ASSERT_TRUE(hook.Enable().has_value());
 
   const std::expected<void, std::error_code> kSecond{hook.Enable()};
 
   ASSERT_FALSE(kSecond.has_value());
-  EXPECT_EQ(kSecond.error(), afw::hook::make_error_code(
-                                 afw::hook::Error::HookAlreadyApplied));
+  EXPECT_EQ(kSecond.error(),
+            afw::hook::make_error_code(afw::hook::Error::HookAlreadyApplied));
   EXPECT_EQ(&kSecond.error().category(), &afw::hook::ErrorCategory());
   EXPECT_EQ(CallSlot(), 2);
 }
 
-TEST_F(VmtHookTest, DisableWithoutEnableReportsHookNotApplied) {
+TEST_F(VmtHookUnit, DisableWithoutEnableReportsHookNotApplied) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
 
   const std::expected<void, std::error_code> kDisabled{hook.Disable()};
@@ -139,7 +139,33 @@ TEST_F(VmtHookTest, DisableWithoutEnableReportsHookNotApplied) {
   EXPECT_EQ(CallSlot(), 1);
 }
 
-TEST_F(VmtHookTest, EnableAfterDisableHooksAgain) {
+TEST_F(VmtHookUnit, EnablePropagatesTheProtectGuardFailure) {
+  void** unmapped{nullptr};
+  {
+    const LPVOID kReserved{VirtualAlloc(
+        /*lpAddress        = */ nullptr,
+        /*dwSize           = */ kTableSize,
+        /*flAllocationType = */ MEM_RESERVE,
+        /*flProtect        = */ PAGE_NOACCESS)};
+    ASSERT_NE(kReserved, nullptr);
+    ASSERT_NE(VirtualFree(
+                  /*lpAddress  = */ kReserved,
+                  /*dwSize     = */ 0,
+                  /*dwFreeType = */ MEM_RELEASE),
+              FALSE);
+    unmapped = static_cast<void**>(kReserved);
+  }
+
+  afw::hook::VmtHook hook{unmapped, kSlot, ToPointer(&DetourFn)};
+
+  const std::expected<void, std::error_code> kEnabled{hook.Enable()};
+
+  ASSERT_FALSE(kEnabled.has_value());
+  EXPECT_EQ(&kEnabled.error().category(), &std::system_category());
+  EXPECT_NE(kEnabled.error().value(), 0);
+}
+
+TEST_F(VmtHookUnit, EnableAfterDisableHooksAgain) {
   afw::hook::VmtHook hook{table_, kSlot, ToPointer(&DetourFn)};
   ASSERT_TRUE(hook.Enable().has_value());
   ASSERT_TRUE(hook.Disable().has_value());

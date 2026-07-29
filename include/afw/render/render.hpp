@@ -1,7 +1,5 @@
 #pragma once
 
-#include <windows.h>
-
 #include <expected>
 #include <system_error>
 
