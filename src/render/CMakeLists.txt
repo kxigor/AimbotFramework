@@ -8,6 +8,8 @@
 
 add_library(afw_render STATIC
   render.cpp
+  present_hook.cpp
+  overlay.cpp
 )
 add_library(afw::render ALIAS afw_render)
 
@@ -24,7 +26,10 @@ target_link_libraries(afw_render PUBLIC afw::hook)
 target_link_libraries(afw_render PRIVATE afw::win)
 
 # D3D11CreateDeviceAndSwapChain lives in d3d11.dll; the probe is the only user.
-target_link_libraries(afw_render PRIVATE d3d11)
+target_link_libraries(afw_render PRIVATE d3d11 dxguid)
+
+# Dear ImGui and its Win32/D3D11 backends, pinned as a submodule (third_party/).
+target_link_libraries(afw_render PRIVATE imgui)
 
 if(TARGET project_options)
   target_link_libraries(afw_render PRIVATE project_options)

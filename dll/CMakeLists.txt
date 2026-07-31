@@ -21,6 +21,7 @@ target_link_libraries(aimbot
   PRIVATE
     afw::aimbot
     afw::games::fc3   # pulls in afw::process transitively
+    afw::render       # the Present hook; pulls in afw::hook transitively
     afw::win          # RAII wrappers (ScopedHandle) used in DllMain
 )
 

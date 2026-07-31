@@ -2,25 +2,32 @@
 
 #include <afw/hook/error.hpp>
 #include <afw/hook/vmt_hook.hpp>
+#include <afw/hook/vtable.hpp>
+#include <afw/win/error.hpp>
 #include <afw/win/protect_guard.hpp>
 #include <cstddef>
 #include <expected>
 #include <system_error>
 #include <tuple>
+#include <utility>
 
 namespace afw::hook {
 
 namespace {
 
-[[nodiscard]] void* ReadSlot(void** slot) noexcept {
+[[nodiscard]] std::expected<void*, std::error_code> ReadSlot(
+    void** slot) noexcept {
   MEMORY_BASIC_INFORMATION info{};
   const SIZE_T kQueried{VirtualQuery(
       /*lpAddress = */ static_cast<LPCVOID>(slot),
       /*lpBuffer  = */ &info,
       /*dwLength  = */ sizeof(info))};
-  if (kQueried != sizeof(info) || info.State != MEM_COMMIT ||
-      info.Protect == PAGE_NOACCESS || (info.Protect & PAGE_GUARD) != 0) {
-    return nullptr;
+  if (kQueried != sizeof(info)) {
+    return std::unexpected{win::LastError()};
+  }
+  if (info.State != MEM_COMMIT || info.Protect == PAGE_NOACCESS ||
+      (info.Protect & PAGE_GUARD) != 0) {
+    return std::unexpected{make_error_code(Error::SlotNotReadable)};
   }
 
   return *slot;
@@ -28,15 +35,28 @@ namespace {
 
 }  // namespace
 
-VmtHook::VmtHook(void** vtable, std::size_t index) noexcept
-    : kSlot_{vtable + index}, kOriginal_{ReadSlot(kSlot_)} {}
+std::expected<VmtHook, std::error_code> VmtHook::Create(
+    Vtable table, std::size_t index) noexcept {
+  void** const kSlot{table.Slot(index)};
+
+  const std::expected<void*, std::error_code> kOriginal{ReadSlot(kSlot)};
+  if (!kOriginal) {
+    return std::unexpected{kOriginal.error()};
+  }
+
+  return std::expected<VmtHook, std::error_code>{std::in_place, AdoptTag{},
+                                                 kSlot, *kOriginal};
+}
+
+VmtHook::VmtHook(AdoptTag /*tag*/, void** slot, void* original) noexcept
+    : kSlot_{slot}, kOriginal_{original} {}
 
 VmtHook::~VmtHook() { std::ignore = Disable(); }
 
 std::expected<void, std::error_code> VmtHook::SetDetourRaw(
     void* detour) noexcept {
-  if (kOriginal_ == nullptr) {
-    return std::unexpected{make_error_code(Error::SlotNotReadable)};
+  if (isEnabled_) {
+    return std::unexpected{make_error_code(Error::HookAlreadyApplied)};
   }
 
   detour_ = detour;

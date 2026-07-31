@@ -1,13 +1,15 @@
 # =========================================================
 # afw::hook  (STATIC)
 # =========================================================
-# Function-interception primitives. VmtHook swaps one virtual method table slot,
+# Function-interception primitives. Vtable names the layout of a virtual method
+# table and hands out the address of a slot; VmtHook swaps one such slot,
 # which is how COM interfaces such as IDXGISwapChain are intercepted; WndProcHook
 # replaces a window procedure through SetWindowLongPtrW. Both put back what they
 # replaced on destruction. Windows-only, so it is added from src/ only under
 # WIN32.
 
 add_library(afw_hook STATIC
+  vtable.cpp
   vmt_hook.cpp
   wnd_proc_hook.cpp
   error.cpp

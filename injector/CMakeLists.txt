@@ -39,11 +39,16 @@ endif()
 
 # Stage the freshly built aimbot.dll next to injector.exe so ResolveDllPath (it
 # looks in the executable's own directory) can find and inject it at runtime.
+#
+# A target of its own rather than POST_BUILD on the injector: a POST_BUILD command
+# only runs when its own target is relinked, so a change confined to the DLL left
+# a stale copy staged and the injector kept loading the previous build.
 if(TARGET aimbot)
-  add_custom_command(TARGET afw_injector POST_BUILD
+  add_custom_target(afw_stage_dll ALL
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       $<TARGET_FILE:aimbot> $<TARGET_FILE_DIR:afw_injector>
     COMMENT "Staging aimbot.dll next to injector.exe"
     VERBATIM
   )
+  add_dependencies(afw_stage_dll aimbot afw_injector)
 endif()

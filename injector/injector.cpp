@@ -11,7 +11,7 @@
 
 namespace {
 
-constexpr PCWSTR kTargetImageName{L"notepad.exe"};
+constexpr PCWSTR kTargetImageName{L"farcry3_d3d11.exe"};
 constexpr PCWSTR kDllName{L"aimbot.dll"};
 
 // Absolute path to the DLL that is staged next to this executable.

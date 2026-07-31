@@ -1,5 +1,6 @@
 #pragma once
 
+#include <afw/hook/vtable.hpp>
 #include <bit>
 #include <cstddef>
 #include <expected>
@@ -14,8 +15,13 @@ concept SlotFunction =
     sizeof(Fn) == sizeof(void*);
 
 class VmtHook {
+  struct AdoptTag {};
+
  public:
-  VmtHook(void** vtable, std::size_t index) noexcept;
+  [[nodiscard]] static std::expected<VmtHook, std::error_code> Create(
+      Vtable table, std::size_t index) noexcept;
+
+  VmtHook(AdoptTag tag, void** slot, void* original) noexcept;
 
   VmtHook(const VmtHook&) = delete;
   VmtHook& operator=(const VmtHook&) = delete;

@@ -24,8 +24,8 @@ class HookErrorCategory final : public std::error_category {
         return "the hook has no detour: SetDetour must name one before the "
                "hook can be enabled";
       case Error::SlotNotReadable:
-        return "the table slot was not readable when the hook was constructed: "
-               "the address is not committed, or the page denies access";
+        return "the table slot is not readable: the address is not committed, "
+               "or the page denies access";
       default:
         return "unknown afw::hook error";
     }

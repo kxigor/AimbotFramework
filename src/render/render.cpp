@@ -2,6 +2,7 @@
 #include <dxgi.h>
 #include <windows.h>
 
+#include <afw/hook/vtable.hpp>
 #include <afw/render/render.hpp>
 #include <afw/win/error.hpp>
 #include <expected>
@@ -57,7 +58,7 @@ void DestroyProbeWindow(HWND window, HINSTANCE instance) noexcept {
       /*hInstance   = */ instance);
 }
 
-[[nodiscard]] std::expected<void**, std::error_code> ReadVtable(
+[[nodiscard]] std::expected<hook::Vtable, std::error_code> ReadVtable(
     HWND window) noexcept {
   // clang-format off
   const DXGI_SWAP_CHAIN_DESC kDesc{
@@ -99,12 +100,12 @@ void DestroyProbeWindow(HWND window, HINSTANCE instance) noexcept {
   device->Release();
   swapChain->Release();
 
-  return kVtable;
+  return hook::Vtable{kVtable};
 }
 
 }  // namespace
 
-std::expected<void**, std::error_code> ProbeSwapChainVtable() noexcept {
+std::expected<hook::Vtable, std::error_code> ProbeSwapChainVtable() noexcept {
   HINSTANCE instance{GetModuleHandleW(
       /*lpModuleName = */ nullptr)};
   if (instance == nullptr) {
@@ -117,7 +118,8 @@ std::expected<void**, std::error_code> ProbeSwapChainVtable() noexcept {
     return std::unexpected{kWindow.error()};
   }
 
-  const std::expected<void**, std::error_code> kVtable{ReadVtable(*kWindow)};
+  const std::expected<hook::Vtable, std::error_code> kVtable{
+      ReadVtable(*kWindow)};
 
   DestroyProbeWindow(*kWindow, instance);
 

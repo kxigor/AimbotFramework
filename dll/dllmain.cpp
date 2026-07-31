@@ -1,19 +1,155 @@
 #include <windows.h>
 
+#include <afw/hook/vmt_hook.hpp>
+#include <afw/hook/vtable.hpp>
+#include <afw/render/overlay.hpp>
+#include <afw/render/present_hook.hpp>
+#include <afw/render/render.hpp>
 #include <afw/win/scoped_handle.hpp>
+#include <array>
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
+#include <cstring>
+#include <cwchar>
+#include <expected>
+#include <system_error>
 
 namespace {
 
-DWORD WINAPI OnAttach(LPVOID module) {
-  MessageBoxW(
-      /*hWnd      = */ nullptr,
-      /*lpText    = */
-      L"aimbot.dll is injected and running inside this process.",
-      /*lpCaption = */ L"AimbotFramework",
-      /*uType     = */ MB_OK | MB_ICONINFORMATION);
-  FreeLibraryAndExitThread(
-      /*hLibModule = */ static_cast<HMODULE>(module),
-      /*dwExitCode = */ 0);
+constexpr std::size_t kMessageChars{256};
+constexpr std::size_t kSuffixChars{5};
+constexpr std::uint64_t kFrameLogInterval{600};
+
+void Log(const char* text) {
+  OutputDebugStringA(text);
+
+  HMODULE module{nullptr};
+  if (GetModuleHandleExW(
+          /*dwFlags      = */ GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+              GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+          // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+          /*lpModuleName = */ reinterpret_cast<PCWSTR>(&Log),
+          /*phModule     = */ &module) == FALSE) {
+    return;
+  }
+
+  std::array<WCHAR, MAX_PATH> path{};
+  const DWORD kLength{GetModuleFileNameW(
+      /*hModule    = */ module,
+      /*lpFilename = */ path.data(),
+      /*nSize      = */ static_cast<DWORD>(MAX_PATH))};
+  if (kLength == 0 ||
+      kLength + kSuffixChars > static_cast<std::size_t>(MAX_PATH)) {
+    return;
+  }
+  std::wmemcpy(path.data() + kLength, L".log", kSuffixChars);
+
+  const afw::win::ScopedHandle kFile{CreateFileW(
+      /*lpFileName            = */ path.data(),
+      /*dwDesiredAccess       = */ FILE_APPEND_DATA,
+      /*dwShareMode           = */ FILE_SHARE_READ | FILE_SHARE_WRITE,
+      /*lpSecurityAttributes  = */ nullptr,
+      /*dwCreationDisposition = */ OPEN_ALWAYS,
+      /*dwFlagsAndAttributes  = */ FILE_ATTRIBUTE_NORMAL,
+      /*hTemplateFile         = */ nullptr)};
+  if (!kFile) {
+    return;
+  }
+
+  DWORD written{};
+  WriteFile(
+      /*hFile                  = */ kFile.Get(),
+      /*lpBuffer               = */ text,
+      /*nNumberOfBytesToWrite  = */ static_cast<DWORD>(std::strlen(text)),
+      /*lpNumberOfBytesWritten = */ &written,
+      /*lpOverlapped           = */ nullptr);
+}
+
+void LogFailure(const char* step, const std::error_code& error) {
+  std::array<char, kMessageChars> message{};
+  std::snprintf(message.data(), message.size(), "[aimbot] %s failed: %s\n",
+                step, error.message().c_str());
+  Log(message.data());
+}
+
+void LogTable(const afw::hook::Vtable& table) {
+  std::array<char, kMessageChars> message{};
+  std::snprintf(message.data(), message.size(),
+                "[aimbot] 2/5 vtable at %p, Present at %p\n",
+                static_cast<const void*>(table.Get()),
+                table.At(afw::render::kPresentSlot));
+  Log(message.data());
+}
+
+HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
+                                UINT flags) {
+  static std::uint64_t frames{0};
+  ++frames;
+
+  if (frames % kFrameLogInterval == 0) {
+    std::array<char, kMessageChars> message{};
+    std::snprintf(message.data(), message.size(), "[aimbot] frame %llu\n",
+                  static_cast<unsigned long long>(frames));
+    Log(message.data());
+  }
+
+  const std::expected<void, std::error_code> kDrawn{
+      afw::render::DrawOverlayFrame(swapChain)};
+  if (!kDrawn) {
+    static bool reported{false};
+    if (!reported) {
+      reported = true;
+      LogFailure("drawing the overlay", kDrawn.error());
+    }
+  }
+
+  afw::render::PresentFn original{afw::render::OriginalPresent()};
+  if (original == nullptr) {
+    return E_FAIL;
+  }
+
+  return original(swapChain, syncInterval, flags);
+}
+
+DWORD WINAPI OnAttach(LPVOID /*parameter*/) {
+  Log("[aimbot] 1/5 attached\n");
+
+  const std::expected<afw::hook::Vtable, std::error_code> kTable{
+      afw::render::ProbeSwapChainVtable()};
+  if (!kTable) {
+    LogFailure("2/5 probing the swap chain vtable", kTable.error());
+    return 1;
+  }
+  LogTable(*kTable);
+
+  std::expected<afw::hook::VmtHook, std::error_code> hook{
+      afw::hook::VmtHook::Create(*kTable, afw::render::kPresentSlot)};
+  if (!hook) {
+    LogFailure("3/5 creating the Present hook", hook.error());
+    return 1;
+  }
+  Log("[aimbot] 3/5 hook created\n");
+
+  const std::expected<void, std::error_code> kSet{
+      hook->SetDetour(&PresentDetour)};
+  if (!kSet) {
+    LogFailure("4/5 setting the Present detour", kSet.error());
+    return 1;
+  }
+  Log("[aimbot] 4/5 detour set\n");
+
+  const afw::render::PresentBinding kBound{*hook};
+
+  const std::expected<void, std::error_code> kEnabled{hook->Enable()};
+  if (!kEnabled) {
+    LogFailure("5/5 enabling the Present hook", kEnabled.error());
+    return 1;
+  }
+  Log("[aimbot] 5/5 Present hooked\n");
+
+  Sleep(INFINITE);
+
   return 0;
 }
 
@@ -27,7 +163,7 @@ BOOL APIENTRY DllMain(HINSTANCE instance, DWORD reason, LPVOID /*reserved*/) {
         /*lpThreadAttributes = */ nullptr,
         /*dwStackSize        = */ 0,
         /*lpStartAddress     = */ OnAttach,
-        /*lpParameter        = */ instance,
+        /*lpParameter        = */ nullptr,
         /*dwCreationFlags    = */ 0,
         /*lpThreadId         = */ nullptr)};
   }

@@ -1,14 +1,12 @@
 #include <gtest/gtest.h>
 #include <windows.h>
 
+#include <afw/hook/vtable.hpp>
 #include <afw/render/render.hpp>
-#include <cstddef>
 #include <expected>
 #include <system_error>
 
 namespace {
-
-constexpr std::size_t kPresentSlot{8};
 
 [[nodiscard]] LPVOID AllocationBaseOf(LPCVOID addr) {
   MEMORY_BASIC_INFORMATION info{};
@@ -22,23 +20,23 @@ constexpr std::size_t kPresentSlot{8};
 }  // namespace
 
 TEST(RenderUnit, ReturnsATableThatLivesInsideDxgi) {
-  const std::expected<void**, std::error_code> kVtable{
+  const std::expected<afw::hook::Vtable, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();
-  ASSERT_NE(*kVtable, nullptr);
+  ASSERT_NE(kVtable->Get(), nullptr);
 
   const HMODULE kDxgi{GetModuleHandleW(/*lpModuleName = */ L"dxgi.dll")};
   ASSERT_NE(kDxgi, nullptr);
 
-  EXPECT_EQ(AllocationBaseOf(*kVtable), static_cast<LPVOID>(kDxgi));
+  EXPECT_EQ(AllocationBaseOf(kVtable->Get()), static_cast<LPVOID>(kDxgi));
 }
 
 TEST(RenderUnit, PresentSlotPointsAtCodeInsideDxgi) {
-  const std::expected<void**, std::error_code> kVtable{
+  const std::expected<afw::hook::Vtable, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();
 
-  void* const kPresent{(*kVtable)[kPresentSlot]};
+  void* const kPresent{kVtable->At(afw::render::kPresentSlot)};
   ASSERT_NE(kPresent, nullptr);
 
   const HMODULE kDxgi{GetModuleHandleW(/*lpModuleName = */ L"dxgi.dll")};
@@ -51,25 +49,25 @@ TEST(RenderUnit, TwoProbesAgreeOnTheAddress) {
   // The whole design rests on the table belonging to the class rather than to
   // the object. If that ever stops holding, hooking a throwaway swap chain
   // would no longer affect the game's, and this is what would notice.
-  const std::expected<void**, std::error_code> kFirst{
+  const std::expected<afw::hook::Vtable, std::error_code> kFirst{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kFirst.has_value()) << kFirst.error().message();
 
-  const std::expected<void**, std::error_code> kSecond{
+  const std::expected<afw::hook::Vtable, std::error_code> kSecond{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kSecond.has_value()) << kSecond.error().message();
 
-  EXPECT_EQ(*kFirst, *kSecond);
+  EXPECT_EQ(kFirst->Get(), kSecond->Get());
 }
 
 TEST(RenderUnit, LeavesNoProbeWindowClassBehind) {
-  const std::expected<void**, std::error_code> kVtable{
+  const std::expected<afw::hook::Vtable, std::error_code> kVtable{
       afw::render::ProbeSwapChainVtable()};
   ASSERT_TRUE(kVtable.has_value()) << kVtable.error().message();
 
   // A second run would fail at RegisterClassExW with ERROR_CLASS_ALREADY_EXISTS
   // if the first had not unregistered its class.
-  const std::expected<void**, std::error_code> kAgain{
+  const std::expected<afw::hook::Vtable, std::error_code> kAgain{
       afw::render::ProbeSwapChainVtable()};
 
   EXPECT_TRUE(kAgain.has_value()) << kAgain.error().message();

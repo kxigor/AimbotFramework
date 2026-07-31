@@ -82,6 +82,10 @@ endif()
 # =========================================================
 # 4. SUBDIRECTORIES
 # =========================================================
+if(WIN32)
+  add_subdirectory(third_party)  # Dear ImGui submodule + Win32/D3D11 backends
+endif()
+
 add_subdirectory(src)          # afw::core (always)
 
 if(AFW_BUILD_DLL)
