@@ -1,5 +1,7 @@
 #include <windows.h>
 
+#include <afw/esp/esp.hpp>
+#include <afw/games/fc3/fc3.hpp>
 #include <afw/hook/vmt_hook.hpp>
 #include <afw/hook/vtable.hpp>
 #include <afw/render/overlay.hpp>
@@ -19,7 +21,7 @@ namespace {
 
 constexpr std::size_t kMessageChars{256};
 constexpr std::size_t kSuffixChars{5};
-constexpr std::uint64_t kFrameLogInterval{600};
+constexpr std::uint64_t kStatusInterval{1800};
 
 void Log(const char* text) {
   OutputDebugStringA(text);
@@ -82,20 +84,45 @@ void LogTable(const afw::hook::Vtable& table) {
   Log(message.data());
 }
 
+void LogStatus(std::uint64_t frames) {
+  const afw::games::fc3::Diagnostics kReport{
+      afw::games::fc3::ReadDiagnostics()};
+  const std::expected<afw::games::fc3::CameraBasis, std::error_code> kCamera{
+      afw::games::fc3::ReadCamera()};
+
+  std::array<char, kMessageChars> message{};
+  if (!kCamera) {
+    std::snprintf(message.data(), message.size(),
+                  "[aimbot] frame %llu | view %llX | %s\n", frames,
+                  static_cast<std::uint64_t>(kReport.cameraView),
+                  kCamera.error().message().c_str());
+  } else {
+    std::snprintf(
+        message.data(), message.size(),
+        "[aimbot] frame %llu | view %llX | pos %.1f %.1f %.1f | fov %.4f | "
+        "render %dx%d\n",
+        frames, static_cast<std::uint64_t>(kReport.cameraView),
+        static_cast<double>(kCamera->position.at(0)),
+        static_cast<double>(kCamera->position.at(1)),
+        static_cast<double>(kCamera->position.at(2)),
+        static_cast<double>(kCamera->fovRadians), kReport.viewportWidth,
+        kReport.viewportHeight);
+  }
+
+  Log(message.data());
+}
+
 HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
                                 UINT flags) {
   static std::uint64_t frames{0};
   ++frames;
 
-  if (frames % kFrameLogInterval == 0) {
-    std::array<char, kMessageChars> message{};
-    std::snprintf(message.data(), message.size(), "[aimbot] frame %llu\n",
-                  static_cast<unsigned long long>(frames));
-    Log(message.data());
+  if (frames % kStatusInterval == 0) {
+    LogStatus(frames);
   }
 
   const std::expected<void, std::error_code> kDrawn{
-      afw::render::DrawOverlayFrame(swapChain)};
+      afw::render::DrawOverlayFrame(swapChain, &afw::esp::DrawFrame)};
   if (!kDrawn) {
     static bool reported{false};
     if (!reported) {

@@ -7,7 +7,9 @@ struct IDXGISwapChain;
 
 namespace afw::render {
 
+using FrameCallback = void (*)() noexcept;
+
 [[nodiscard]] std::expected<void, std::error_code> DrawOverlayFrame(
-    IDXGISwapChain* swapChain) noexcept;
+    IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept;
 
 }  // namespace afw::render

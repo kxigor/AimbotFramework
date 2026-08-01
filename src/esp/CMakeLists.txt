@@ -7,6 +7,7 @@
 # so it is added from src/ only under WIN32.
 
 add_library(afw_esp STATIC
+  projection.cpp
   esp.cpp
 )
 add_library(afw::esp ALIAS afw_esp)
@@ -19,7 +20,7 @@ target_include_directories(afw_esp
 )
 
 target_link_libraries(afw_esp PUBLIC afw::config)
-target_link_libraries(afw_esp PRIVATE afw::render afw::games::fc3)
+target_link_libraries(afw_esp PRIVATE afw::render afw::games::fc3 imgui)
 
 if(TARGET project_options)
   target_link_libraries(afw_esp PRIVATE project_options)

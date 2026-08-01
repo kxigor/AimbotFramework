@@ -6,7 +6,8 @@
 # Skeleton for now. One target per game so you link only the title you target.
 
 add_library(afw_games_fc3 STATIC
-  fc3.cpp   # replace with your real sources
+  fc3.cpp
+  error.cpp
 )
 add_library(afw::games::fc3 ALIAS afw_games_fc3)
 

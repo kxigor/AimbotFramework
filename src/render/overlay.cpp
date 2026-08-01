@@ -102,15 +102,18 @@ Overlay& State() noexcept {
   return {};
 }
 
-void BuildFrame() {
+void BuildFrame(FrameCallback onFrame) {
   ImGui_ImplDX11_NewFrame();
   ImGui_ImplWin32_NewFrame();
   ImGui::NewFrame();
 
   ImGui::Begin("AimbotFramework");
-  ImGui::Text("M3 -- first pixel");
   ImGui::Text("%.1f FPS", static_cast<double>(ImGui::GetIO().Framerate));
   ImGui::End();
+
+  if (onFrame != nullptr) {
+    onFrame();
+  }
 
   ImGui::Render();
 }
@@ -118,7 +121,7 @@ void BuildFrame() {
 }  // namespace
 
 std::expected<void, std::error_code> DrawOverlayFrame(
-    IDXGISwapChain* swapChain) noexcept {
+    IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept {
   if (swapChain == nullptr) {
     return std::unexpected{FromHresult(E_POINTER)};
   }
@@ -130,7 +133,7 @@ std::expected<void, std::error_code> DrawOverlayFrame(
     }
   }
 
-  BuildFrame();
+  BuildFrame(onFrame);
 
   const std::expected<void, std::error_code> kBound{BindBackBuffer(swapChain)};
   if (!kBound) {

@@ -22,18 +22,20 @@
 # overlay. None contains a Windows entry point. process / games / aimbot are
 # still empty skeletons; afw::remote is implemented and Windows-only.
 
-add_subdirectory(process)
-add_subdirectory(games)
-add_subdirectory(aimbot)
 add_subdirectory(config)
 
 # Windows-only libraries; skip on non-Windows so afw::core still configures for
 # a Linux/macOS consumer. Ordered by dependency: win before remote and hook,
-# hook before render, render before its two consumers.
+# hook before render, render before its two consumers. process reads this
+# process's own memory through the Win32 API, so games and aimbot, which build
+# on it, are Windows-only too.
 if(WIN32)
   add_subdirectory(win)
   add_subdirectory(remote)
   add_subdirectory(hook)
+  add_subdirectory(process)
+  add_subdirectory(games)
+  add_subdirectory(aimbot)
   add_subdirectory(render)
   add_subdirectory(menu)
   add_subdirectory(esp)

@@ -1,10 +1,13 @@
 # =========================================================
 # afw::process  (STATIC)
 # =========================================================
-# Convenient access to the host process from inside it. Skeleton for now.
+# Convenient access to the host process from inside it: module bases and reads
+# that report an unreadable address instead of faulting. Windows-only, so it is
+# added from src/ only under WIN32.
 
 add_library(afw_process STATIC
-  process.cpp   # replace with your real sources
+  memory.cpp
+  error.cpp
 )
 add_library(afw::process ALIAS afw_process)
 
