@@ -2,8 +2,12 @@
 
 A personal C++23 project for learning the Windows API, reverse-engineering and
 3D geometry, using a single-player copy of **Far Cry 3** (Dunia engine) as the
-subject. It is a work in progress: the low-level plumbing works, the overlay and
-the game-specific logic are still being written.
+subject.
+
+The pipeline works end to end: `injector.exe` loads `aimbot.dll` into the running
+game, the DLL hooks `IDXGISwapChain::Present`, draws an ImGui overlay over the
+frame, reads the game's live camera and projects world points into screen space.
+What is left is the entity list and the aim assist on top of it.
 
 `afw` = **A**imbot**F**rame**w**ork (namespace / target prefix).
 
@@ -11,40 +15,61 @@ the game-specific logic are still being written.
 
 Implemented:
 
-- **`afw::win`** — RAII wrappers over raw Win32 resources: `ScopedHandle`
-  (`CloseHandle`), `RemoteMemory` (`VirtualFreeEx` in another process), and a
-  `LastError()` helper that turns `GetLastError` into a `std::error_code`.
-- **`afw::remote`** — find a process by name and inject a DLL into it via the
-  classic CreateRemoteThread + LoadLibraryW technique. Reports failures as
-  `std::expected<T, std::error_code>`.
-- **`injector.exe`** — standalone tool that locates the target and loads
-  `aimbot.dll` into it.
-- **`aimbot.dll`** — stub `DllMain` that compiles and will host the libraries
-  below.
+- **`afw::win`** — RAII over raw Win32 and COM resources: `ScopedHandle`
+  (`CloseHandle`), `RemoteMemory` (`VirtualFreeEx` in another process),
+  `ProtectGuard` (`VirtualProtectEx`, restores the previous protection),
+  `ComPtr` (COM `Release`), and `LastError()` turning `GetLastError` into a
+  `std::error_code`.
+- **`afw::remote`** — find a process by image name and inject a DLL into it via
+  the classic CreateRemoteThread + LoadLibraryW technique. Success is decided by
+  the remote thread's exit code, not by the API call returning.
+- **`afw::hook`** — `Vtable` names the layout of a virtual method table and hands
+  out the address of a slot; `VmtHook` swaps one such slot and puts the original
+  back on destruction. The original is captured at construction, so a detour that
+  chains to it can be published before the slot is ever written.
+- **`afw::process`** — module bases and reads that report an unreadable address
+  instead of faulting: a wrong offset becomes a `std::error_code`, not a crash in
+  the host process.
+- **`afw::render`** — obtains the swap chain vtable from a throwaway WARP probe,
+  owns the `Present` binding, and draws the ImGui overlay, offering its users a
+  per-frame callback.
+- **`afw::esp`** — world-to-screen: view and projection matrices built by hand,
+  `w`-clipping for points behind the camera, plus a diagnostics panel showing
+  every address, offset and matrix input in play.
+- **`afw::games::fc3`** — Far Cry 3 bindings: the pointer chain to the live
+  camera, its basis and field of view, and the render viewport. Every step is a
+  checked read, and all addresses are rebased from the Ghidra image base at run
+  time, so ASLR is handled in one place.
+- **`injector.exe`** / **`aimbot.dll`** — the working pair, verified in the game.
 
 Skeletons — headers, targets and empty namespaces are in place, the code is not:
 
-- **`afw::win`** — `ProtectGuard` (`VirtualProtect`) and `ComPtr` (COM
-  `AddRef`/`Release`) alongside the wrappers above.
-- **`afw::hook`** — function interception. `VmtHook` swaps one virtual method
-  table slot, which is how COM interfaces such as `IDXGISwapChain` are hooked;
-  `WndProcHook` replaces a window procedure through `SetWindowLongPtrW`. Both
-  restore what they replaced on destruction. An inline/trampoline hook is
-  deliberately deferred — it is not needed to reach a working overlay.
-- **`afw::render`** — the overlay's foundation: owns the
-  `IDXGISwapChain::Present` hook, the Direct3D 11 resources and the ImGui
-  context, and offers its users a per-frame drawing callback.
+- **`afw::hook::WndProcHook`** — window procedure replacement through
+  `SetWindowLongPtrW`, for routing input between the game and the overlay.
 - **`afw::config`** — settings shared by the overlay's consumers.
 - **`afw::menu`** — the overlay's user interface, drawn on top of `afw::config`.
-- **`afw::esp`** — game entities projected into screen space and drawn over the
-  frame.
-- **`afw::process`** — generic access to the host process (module bases, pattern
-  scanning, memory helpers). Engine-agnostic.
-- **`afw::games::fc3`** — Far Cry 3 (Dunia) bindings: offsets, structs,
-  entity/bone/view-matrix reading. Depends on `afw::process`. One library per
-  title, so more games can sit alongside as `afw::games::<title>`.
-- **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic (a game is
-  wired in behind an interface).
+- **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic.
+
+An inline/trampoline hook is still absent. It was not needed to reach a working
+overlay; it is needed for the entity list, which the engine exposes through a
+non-virtual per-frame function.
+
+### Milestones
+
+| | | |
+|---|---|---|
+| M0 | 32-bit build, injection | done |
+| M1 | RAII wrappers (`ProtectGuard`, `ComPtr`, `VmtHook`) | done |
+| M2 | `Present` hook, frames counted, nothing drawn | done |
+| M3 | first pixel: ImGui with both backends | done |
+| M6 | geometry: a marker pinned to a world point | done |
+| M4 | input: `WndProcHook`, overlay toggle | next |
+| M5 | `ResizeBuffers` | not blocking — the render target view is rebuilt every frame |
+| M7 | ESP: entity list to boxes | needs an inline hook |
+| M8 | menu | |
+
+M6 was taken before M4 and M5 deliberately: the geometry is the part the project
+exists to learn, and it needs neither input nor a cached render target.
 
 ### Direction
 
@@ -64,28 +89,33 @@ settings alone and needs no user interface present.
 
 ```
 CMakeLists.txt          root: options (AFW_*) and subdirectories
-CMakePresets.json       UCRT64-oriented presets
+CMakePresets.json       UCRT64 and MINGW32 presets
 cmake/                  ProjectOptions / Sanitizers / Coverage / Format / Tidy / Gtest
+third_party/
+  imgui/                Dear ImGui, git submodule pinned to a release tag
+  CMakeLists.txt        its build file, kept outside the submodule
 include/afw/            public headers (sibling of src/)
-  win/ remote/          implemented
-  hook/ render/ menu/ esp/ config/    skeletons
-  process/ games/ aimbot/             skeletons
+  win/ remote/ hook/ process/ render/ esp/ games/fc3/    implemented
+  menu/ config/ aimbot/ hook/wnd_proc_hook.hpp           skeletons
 src/
-  win/ remote/          STATIC, Windows-only, implemented
-  hook/ render/ menu/ esp/            STATIC, Windows-only, skeletons
-  config/                             STATIC, platform-agnostic, skeleton
-  process/ games/fc3/ aimbot/         STATIC, skeletons
+  win/ remote/ hook/ process/ render/ esp/ games/fc3/    STATIC, Windows-only
+  config/                                 STATIC, platform-agnostic, skeleton
+  menu/ aimbot/                           STATIC, skeletons
 injector/
   injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
 dll/
-  dllmain.cpp           stub entry point -> aimbot.dll
+  dllmain.cpp           entry point -> probes, hooks Present, parks
 tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
 
-Dependency direction: `games::* -> process`; `render -> hook -> win`; `menu` and
-`esp` sit on `render` and share `config`. No library contains a Windows entry
-point.
+Dependency direction: `games::* -> process`; `render -> hook -> win`; `esp` sits
+on `render` and `games::fc3`; `menu` is its sibling and they share `config`. No
+library contains a Windows entry point.
+
+`afw::process` reads this process's memory through the Win32 API, so it and the
+libraries built on it (`games::*`, `aimbot`) are added only under `WIN32`;
+`afw::config` stays platform-agnostic.
 
 ## Target architecture
 
@@ -101,6 +131,17 @@ applies it only when `CMAKE_SIZEOF_VOID_P` is 8. `--dynamicbase` and
 
 To confirm on your own copy, read `IMAGE_FILE_HEADER.Machine` from the PE header:
 `0x014C` is x86, `0x8664` is x64.
+
+## Getting the sources
+
+Dear ImGui is a submodule, so a plain `git clone` leaves `third_party/imgui`
+empty and the configure step stops with a message saying exactly this:
+
+```sh
+git clone --recurse-submodules <url>
+# or, in an existing clone:
+git submodule update --init --recursive
+```
 
 ## Build (from an MSYS2 **UCRT64** shell)
 
@@ -119,6 +160,8 @@ cmake --build --preset ci-release
 
 ## Build 32-bit (from an MSYS2 **MINGW32** shell)
 
+This is the build that runs in the game.
+
 ```sh
 pacman -S --needed mingw-w64-i686-gcc mingw-w64-i686-gtest
 
@@ -135,21 +178,43 @@ any environment will do — they are architecture-independent build drivers.
 Running a preset from the wrong shell is a configure error rather than a silent
 build of the other architecture: `dev-debug-x86` declares
 `AFW_TARGET_POINTER_SIZE` and the top-level `CMakeLists.txt` checks it against
-the compiler CMake actually found.
+the compiler CMake actually found. Note that a **build** started from the wrong
+shell fails differently: `cc1plus` cannot find its own DLLs and dies without
+printing a diagnostic, so a compile that fails with no message is almost always
+`PATH`, not the code.
 
 The lint gate (`FormatCheck`, `TidyCheck`) is registered only in the 64-bit
 build; clang-format and clang-tidy do not depend on the target architecture, so
-running them twice would only cost time.
+running them twice would only cost time. The vendored ImGui is outside their file
+globs and does not link `project_options`: the warning set is tuned for our own
+code.
+
+`aimbot.dll` is staged next to `injector.exe` by a build target of its own rather
+than a `POST_BUILD` step, because a `POST_BUILD` command only runs when its own
+target is relinked — a change confined to the DLL used to leave a stale copy
+staged.
 
 The DLL output is `aimbot.dll` (no `lib` prefix), with the MinGW runtime linked
 statically so it does not need MSYS2 runtime DLLs on the host's search path, and
 PE hardening enabled (`--dynamicbase --nxcompat --high-entropy-va`).
+
+## Running it
+
+Start Far Cry 3 (the DirectX 11 executable), then run `injector.exe` from the
+32-bit build. The overlay appears with two windows: a frame-rate readout and an
+`ESP` panel listing the whole camera pointer chain, the offsets it walked, the
+camera basis and the projected marker positions.
+
+The DLL also writes `aimbot.dll.log` next to itself — the injection steps, then a
+status line every 1800 frames. It never unloads: unwinding would restore the
+hooked slot while a frame may still be inside the detour.
 
 ### Presets
 
 | Preset              | Type           | Notes                                  |
 |---------------------|----------------|----------------------------------------|
 | `dev-debug`         | Debug          | GCC, no sanitizer (default dev build)  |
+| `dev-debug-x86`     | Debug          | MINGW32, the build that runs in game   |
 | `dev-debug-asan`    | Debug          | ASan+UBSan, forces `clang++`           |
 | `dev-debug-ubsan`   | Debug          | UBSan, forces `clang++`                |
 | `ci-coverage`       | Debug          | gcov instrumentation                   |
@@ -170,6 +235,11 @@ PE hardening enabled (`--dynamicbase --nxcompat --high-entropy-va`).
 | `AFW_ENABLE_FORMAT_CHECK`| ON (top-level)     | register clang-format as a test  |
 | `AFW_ENABLE_TIDY_CHECK`  | ON (top-level)     | register clang-tidy as a test    |
 | `AFW_ENABLE_COVERAGE`    | OFF                | gcov targets (needs tests)       |
+
+`AFW_TARGET_POINTER_SIZE` is not an option but a cache variable the presets set:
+when present, the top-level `CMakeLists.txt` compares it against
+`CMAKE_SIZEOF_VOID_P` and fails the configure if they disagree. Only
+`dev-debug-x86` sets it, to `4`.
 
 ## License & scope
 
