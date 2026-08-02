@@ -1,14 +1,18 @@
 #include <windows.h>
 
+#include <afw/config/config.hpp>
 #include <afw/esp/esp.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/hook/vmt_hook.hpp>
 #include <afw/hook/vtable.hpp>
+#include <afw/hook/wnd_proc_hook.hpp>
+#include <afw/menu/menu.hpp>
 #include <afw/render/overlay.hpp>
 #include <afw/render/present_hook.hpp>
 #include <afw/render/render.hpp>
 #include <afw/win/scoped_handle.hpp>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -17,29 +21,46 @@
 #include <cwchar>
 #include <expected>
 #include <system_error>
+#include <tuple>
 
 namespace {
 
 constexpr std::size_t kMessageChars{256};
 constexpr std::size_t kSuffixChars{5};
 constexpr std::uint64_t kStatusInterval{1800};
+constexpr DWORD kDrainPollMilliseconds{10};
+constexpr int kDrainTicks{200};
+constexpr DWORD kSettleMilliseconds{100};
+constexpr DWORD kWindowPollMilliseconds{50};
+constexpr int kWindowPollTicks{200};
 
-void Log(const char* text) {
-  OutputDebugStringA(text);
-
+// Without UNCHANGED_REFCOUNT this would add a reference the unload would then
+// have to undo.
+[[nodiscard]] HMODULE SelfModule() noexcept {
   HMODULE module{nullptr};
   if (GetModuleHandleExW(
           /*dwFlags      = */ GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          /*lpModuleName = */ reinterpret_cast<PCWSTR>(&Log),
+          /*lpModuleName = */ reinterpret_cast<PCWSTR>(&SelfModule),
           /*phModule     = */ &module) == FALSE) {
+    return nullptr;
+  }
+
+  return module;
+}
+
+void Log(const char* text) {
+  OutputDebugStringA(text);
+
+  const HMODULE kModule{SelfModule()};
+  if (kModule == nullptr) {
     return;
   }
 
   std::array<WCHAR, MAX_PATH> path{};
   const DWORD kLength{GetModuleFileNameW(
-      /*hModule    = */ module,
+      /*hModule    = */ kModule,
       /*lpFilename = */ path.data(),
       /*nSize      = */ static_cast<DWORD>(MAX_PATH))};
   if (kLength == 0 ||
@@ -113,7 +134,89 @@ void LogStatus(std::uint64_t frames) {
   Log(message.data());
 }
 
+// Unmapping the DLL while a game thread is still inside one of the detours
+// takes that thread's return address with it. Hooks come off first, so no
+// thread can enter after that, and this is what says the ones already inside
+// have left.
+[[nodiscard]] std::atomic<int>& DetourDepth() noexcept {
+  static std::atomic<int> depth{0};
+  return depth;
+}
+
+class DetourGuard {
+ public:
+  DetourGuard() noexcept { DetourDepth().fetch_add(1); }
+
+  DetourGuard(const DetourGuard&) = delete;
+  DetourGuard& operator=(const DetourGuard&) = delete;
+
+  DetourGuard(DetourGuard&&) = delete;
+  DetourGuard& operator=(DetourGuard&&) = delete;
+
+  ~DetourGuard() { DetourDepth().fetch_sub(1); }
+};
+
+[[nodiscard]] HANDLE UnloadEvent() noexcept {
+  static const afw::win::ScopedHandle kEvent{CreateEventW(
+      /*lpEventAttributes = */ nullptr,
+      /*bManualReset      = */ TRUE,
+      /*bInitialState     = */ FALSE,
+      /*lpName            = */ nullptr)};
+
+  return kEvent.Get();
+}
+
+WNDPROC& OriginalWndProc() noexcept {
+  static WNDPROC original{nullptr};
+  return original;
+}
+
+class InputBinding {
+ public:
+  explicit InputBinding(const afw::hook::WndProcHook& hook) noexcept {
+    OriginalWndProc() = hook.Original();
+  }
+
+  InputBinding(const InputBinding&) = delete;
+  InputBinding& operator=(const InputBinding&) = delete;
+
+  InputBinding(InputBinding&&) = delete;
+  InputBinding& operator=(InputBinding&&) = delete;
+
+  ~InputBinding() { OriginalWndProc() = nullptr; }
+};
+
+LRESULT __stdcall WndProcDetour(HWND window, UINT message, WPARAM wParam,
+                                LPARAM lParam) {
+  const DetourGuard kInside{};
+
+  if (afw::menu::HandleMessage(window, message, wParam, lParam)) {
+    return TRUE;
+  }
+
+  WNDPROC original{OriginalWndProc()};
+  if (original == nullptr) {
+    return DefWindowProcW(window, message, wParam, lParam);
+  }
+
+  return CallWindowProcW(
+      /*lpPrevWndFunc = */ original,
+      /*hWnd          = */ window,
+      /*Msg           = */ message,
+      /*wParam        = */ wParam,
+      /*lParam        = */ lParam);
+}
+
+// The menu and the ESP are siblings: render knows neither, so the DLL is what
+// puts both into the one per-frame callback.
+void DrawOverlay() noexcept {
+  afw::menu::Draw();
+  afw::esp::DrawFrame();
+}
+
 void AFW_ENGINE_CALL RunAllGroupDetour(void* self, void* /*unused*/) {
+  const DetourGuard kInside{};
+
   afw::games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(self));
 
   afw::games::fc3::RunAllGroupFn original{
@@ -125,6 +228,8 @@ void AFW_ENGINE_CALL RunAllGroupDetour(void* self, void* /*unused*/) {
 
 HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
                                 UINT flags) {
+  const DetourGuard kInside{};
+
   static std::uint64_t frames{0};
   ++frames;
 
@@ -135,13 +240,18 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
   }
 
   const std::expected<void, std::error_code> kDrawn{
-      afw::render::DrawOverlayFrame(swapChain, &afw::esp::DrawFrame)};
+      afw::render::DrawOverlayFrame(swapChain, &DrawOverlay)};
   if (!kDrawn) {
     static bool reported{false};
     if (!reported) {
       reported = true;
       LogFailure("drawing the overlay", kDrawn.error());
     }
+  }
+
+  if (afw::config::Current().unloadRequested) {
+    SetEvent(
+        /*hEvent = */ UnloadEvent());
   }
 
   afw::render::PresentFn original{afw::render::OriginalPresent()};
@@ -152,28 +262,103 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
   return original(swapChain, syncInterval, flags);
 }
 
-void Park() {
-  Log("[aimbot] 7/7 running\n");
-  Sleep(INFINITE);
+void WaitForDetours() noexcept {
+  for (int tick{0}; tick < kDrainTicks; ++tick) {
+    if (DetourDepth().load() == 0) {
+      break;
+    }
+    Sleep(
+        /*dwMilliseconds = */ kDrainPollMilliseconds);
+  }
+
+  // The count reaching zero is decremented from inside this module, so the
+  // thread that did it has a few instructions left to run here.
+  Sleep(
+      /*dwMilliseconds = */ kSettleMilliseconds);
 }
 
-// Nested rather than sequential: both hooks and both bindings are scope-bound,
-// and they have to stay alive until the process ends.
-void InstallUpdateHookAndPark() {
+void RunUntilUnload() {
+  Log("[aimbot] 8/8 running\n");
+  WaitForSingleObject(
+      /*hHandle        = */ UnloadEvent(),
+      /*dwMilliseconds = */ INFINITE);
+  Log("[aimbot] unload requested\n");
+}
+
+// The window is only known once a frame has been through Present, which is why
+// this is the one hook that cannot be installed up front.
+[[nodiscard]] HWND WaitForOverlayWindow() noexcept {
+  for (int tick{0}; tick < kWindowPollTicks; ++tick) {
+    HWND window{afw::render::OverlayWindow()};
+    if (window != nullptr) {
+      return window;
+    }
+    Sleep(
+        /*dwMilliseconds = */ kWindowPollMilliseconds);
+  }
+
+  return nullptr;
+}
+
+void InstallInputHookAndRun() {
+  HWND window{WaitForOverlayWindow()};
+  if (window == nullptr) {
+    Log("[aimbot] 7/8 no overlay window, input not hooked\n");
+    RunUntilUnload();
+    return;
+  }
+
+  std::expected<afw::hook::WndProcHook, std::error_code> hook{
+      afw::hook::WndProcHook::Create(window)};
+  if (!hook) {
+    LogFailure("7/8 creating the input hook", hook.error());
+    RunUntilUnload();
+    return;
+  }
+
+  const std::expected<void, std::error_code> kSet{
+      hook->SetDetour(&WndProcDetour)};
+  if (!kSet) {
+    LogFailure("7/8 setting the input detour", kSet.error());
+    RunUntilUnload();
+    return;
+  }
+
+  const InputBinding kBound{*hook};
+
+  const std::expected<void, std::error_code> kEnabled{hook->Enable()};
+  if (!kEnabled) {
+    LogFailure("7/8 enabling the input hook", kEnabled.error());
+    RunUntilUnload();
+    return;
+  }
+  Log("[aimbot] 7/8 input hooked\n");
+
+  RunUntilUnload();
+
+  // Explicit, so the slot is back before the binding that publishes the
+  // original dies. Left to destruction order it is the other way round, and a
+  // detour that finds no original to chain to drops the call on the floor.
+  std::ignore = hook->Disable();
+}
+
+// Nested rather than sequential: every hook and binding is scope-bound, and
+// they have to come back off in the reverse order they went on.
+void InstallUpdateHookAndRun() {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
       afw::hook::VmtHook::Create(
           afw::hook::Vtable{afw::games::fc3::RunAllGroupSlot()}, 0)};
   if (!hook) {
-    LogFailure("6/7 creating the update hook", hook.error());
-    Park();
+    LogFailure("6/8 creating the update hook", hook.error());
+    InstallInputHookAndRun();
     return;
   }
 
   const std::expected<void, std::error_code> kSet{
       hook->SetDetour(&RunAllGroupDetour)};
   if (!kSet) {
-    LogFailure("6/7 setting the update detour", kSet.error());
-    Park();
+    LogFailure("6/8 setting the update detour", kSet.error());
+    InstallInputHookAndRun();
     return;
   }
 
@@ -181,52 +366,71 @@ void InstallUpdateHookAndPark() {
 
   const std::expected<void, std::error_code> kEnabled{hook->Enable()};
   if (!kEnabled) {
-    LogFailure("6/7 enabling the update hook", kEnabled.error());
-    Park();
+    LogFailure("6/8 enabling the update hook", kEnabled.error());
+    InstallInputHookAndRun();
     return;
   }
-  Log("[aimbot] 6/7 update hooked\n");
+  Log("[aimbot] 6/8 update hooked\n");
 
-  Park();
+  InstallInputHookAndRun();
+
+  std::ignore = hook->Disable();
 }
 
-DWORD WINAPI OnAttach(LPVOID /*parameter*/) {
-  Log("[aimbot] 1/7 attached\n");
-
+void RunSession() {
   const std::expected<afw::hook::Vtable, std::error_code> kTable{
       afw::render::ProbeSwapChainVtable()};
   if (!kTable) {
-    LogFailure("2/7 probing the swap chain vtable", kTable.error());
-    return 1;
+    LogFailure("2/8 probing the swap chain vtable", kTable.error());
+    return;
   }
   LogTable(*kTable);
 
   std::expected<afw::hook::VmtHook, std::error_code> hook{
       afw::hook::VmtHook::Create(*kTable, afw::render::kPresentSlot)};
   if (!hook) {
-    LogFailure("3/7 creating the Present hook", hook.error());
-    return 1;
+    LogFailure("3/8 creating the Present hook", hook.error());
+    return;
   }
-  Log("[aimbot] 3/7 hook created\n");
+  Log("[aimbot] 3/8 hook created\n");
 
   const std::expected<void, std::error_code> kSet{
       hook->SetDetour(&PresentDetour)};
   if (!kSet) {
-    LogFailure("4/7 setting the Present detour", kSet.error());
-    return 1;
+    LogFailure("4/8 setting the Present detour", kSet.error());
+    return;
   }
-  Log("[aimbot] 4/7 detour set\n");
+  Log("[aimbot] 4/8 detour set\n");
 
   const afw::render::PresentBinding kBound{*hook};
 
   const std::expected<void, std::error_code> kEnabled{hook->Enable()};
   if (!kEnabled) {
-    LogFailure("5/7 enabling the Present hook", kEnabled.error());
-    return 1;
+    LogFailure("5/8 enabling the Present hook", kEnabled.error());
+    return;
   }
-  Log("[aimbot] 5/7 Present hooked\n");
+  Log("[aimbot] 5/8 Present hooked\n");
 
-  InstallUpdateHookAndPark();
+  InstallUpdateHookAndRun();
+
+  std::ignore = hook->Disable();
+}
+
+DWORD WINAPI OnAttach(LPVOID /*parameter*/) {
+  Log("[aimbot] 1/8 attached\n");
+
+  RunSession();
+
+  WaitForDetours();
+  afw::render::ShutdownOverlay();
+  Log("[aimbot] unloaded\n");
+
+  const HMODULE kSelf{SelfModule()};
+  if (kSelf != nullptr) {
+    FreeLibraryAndExitThread(
+        /*hLibModule  = */ kSelf,
+        /*dwExitCode  = */ 0);
+  }
 
   return 0;
 }

@@ -43,12 +43,30 @@ endif()
 # A target of its own rather than POST_BUILD on the injector: a POST_BUILD command
 # only runs when its own target is relinked, so a change confined to the DLL left
 # a stale copy staged and the injector kept loading the previous build.
+#
+# The staged copy is stripped of its debug information while the build tree
+# keeps a full one. This is not about disk: a PE is mapped at its SizeOfImage,
+# and DWARF takes that from 2.3 MB to 23.6 MB, which the loader has to find as
+# one free run inside a 32-bit game already holding a 37 MB engine module and
+# ~190 MB of display driver. Past roughly 20 MB the remote LoadLibraryW starts
+# returning NULL.
 if(TARGET aimbot)
+  set(afw_staged_dll $<TARGET_FILE_DIR:afw_injector>/$<TARGET_FILE_NAME:aimbot>)
+
   add_custom_target(afw_stage_dll ALL
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
       $<TARGET_FILE:aimbot> $<TARGET_FILE_DIR:afw_injector>
     COMMENT "Staging aimbot.dll next to injector.exe"
     VERBATIM
   )
+
+  if(CMAKE_STRIP)
+    add_custom_command(TARGET afw_stage_dll POST_BUILD
+      COMMAND ${CMAKE_STRIP} --strip-debug ${afw_staged_dll}
+      COMMENT "Stripping debug information from the staged aimbot.dll"
+      VERBATIM
+    )
+  endif()
+
   add_dependencies(afw_stage_dll aimbot afw_injector)
 endif()

@@ -21,7 +21,9 @@ target_link_libraries(aimbot
   PRIVATE
     afw::aimbot
     afw::games::fc3   # pulls in afw::process transitively
-    afw::esp          # world-to-screen markers drawn from the frame callback
+    afw::esp          # world-to-screen boxes drawn from the frame callback
+    afw::menu         # the overlay's user interface, esp's sibling
+    afw::config       # the toggles both of them read
     afw::render       # the Present hook; pulls in afw::hook transitively
     afw::win          # RAII wrappers (ScopedHandle) used in DllMain
 )

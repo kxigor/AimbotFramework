@@ -1,5 +1,6 @@
 #include <imgui.h>
 
+#include <afw/config/config.hpp>
 #include <afw/esp/esp.hpp>
 #include <afw/esp/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
@@ -468,6 +469,10 @@ void DrawMarker(const std::optional<ScreenPoint>& point, ImU32 colour) {
 }  // namespace
 
 void DrawFrame() noexcept {
+  if (!config::Current().espEnabled) {
+    return;
+  }
+
   const ImVec2 kDisplay{ImGui::GetIO().DisplaySize};
 
   ImGui::SetNextWindowSize(ImVec2{kPanelWidth, kPanelHeight},

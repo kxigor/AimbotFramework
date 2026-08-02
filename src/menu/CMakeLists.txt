@@ -18,7 +18,7 @@ target_include_directories(afw_menu
 )
 
 target_link_libraries(afw_menu PUBLIC afw::config)
-target_link_libraries(afw_menu PRIVATE afw::render)
+target_link_libraries(afw_menu PRIVATE afw::render imgui)
 
 if(TARGET project_options)
   target_link_libraries(afw_menu PRIVATE project_options)

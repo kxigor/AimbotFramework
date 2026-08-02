@@ -11,6 +11,7 @@ enum class Error : std::uint8_t {
   HookNotApplied = 2,
   DetourNotSet = 3,
   SlotNotReadable = 4,
+  WindowNotFound = 5,
 };
 
 [[nodiscard]] const std::error_category& ErrorCategory();

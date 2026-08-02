@@ -29,6 +29,7 @@ struct Overlay {
   win::ComPtr<ID3D11Device> device;
   win::ComPtr<ID3D11DeviceContext> context;
   SurfaceSize backBuffer{};
+  HWND window{nullptr};
   bool ready{false};
 };
 
@@ -67,6 +68,7 @@ Overlay& State() noexcept {
     return std::unexpected{FromHresult(E_FAIL)};
   }
 
+  overlay.window = desc.OutputWindow;
   overlay.ready = true;
 
   return {};
@@ -114,10 +116,6 @@ void BuildFrame(FrameCallback onFrame) {
   ImGui_ImplWin32_NewFrame();
   ImGui::NewFrame();
 
-  ImGui::Begin("AimbotFramework");
-  ImGui::Text("%.1f FPS", static_cast<double>(ImGui::GetIO().Framerate));
-  ImGui::End();
-
   if (onFrame != nullptr) {
     onFrame();
   }
@@ -128,6 +126,24 @@ void BuildFrame(FrameCallback onFrame) {
 }  // namespace
 
 SurfaceSize BackBufferSize() noexcept { return State().backBuffer; }
+
+HWND OverlayWindow() noexcept { return State().window; }
+
+void ShutdownOverlay() noexcept {
+  Overlay& overlay{State()};
+  if (!overlay.ready) {
+    return;
+  }
+  overlay.ready = false;
+
+  ImGui_ImplDX11_Shutdown();
+  ImGui_ImplWin32_Shutdown();
+  ImGui::DestroyContext();
+
+  overlay.context.Reset();
+  overlay.device.Reset();
+  overlay.window = nullptr;
+}
 
 std::expected<void, std::error_code> DrawOverlayFrame(
     IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept {

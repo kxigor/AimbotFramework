@@ -26,6 +26,9 @@ class HookErrorCategory final : public std::error_category {
       case Error::SlotNotReadable:
         return "the table slot is not readable: the address is not committed, "
                "or the page denies access";
+      case Error::WindowNotFound:
+        return "the window was not found: the handle is null or no longer "
+               "names a live window";
       default:
         return "unknown afw::hook error";
     }
