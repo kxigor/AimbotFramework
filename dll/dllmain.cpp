@@ -9,6 +9,7 @@
 #include <afw/render/render.hpp>
 #include <afw/win/scoped_handle.hpp>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -78,7 +79,7 @@ void LogFailure(const char* step, const std::error_code& error) {
 void LogTable(const afw::hook::Vtable& table) {
   std::array<char, kMessageChars> message{};
   std::snprintf(message.data(), message.size(),
-                "[aimbot] 2/5 vtable at %p, Present at %p\n",
+                "[aimbot] 2/7 vtable at %p, Present at %p\n",
                 static_cast<const void*>(table.Get()),
                 table.At(afw::render::kPresentSlot));
   Log(message.data());
@@ -112,10 +113,22 @@ void LogStatus(std::uint64_t frames) {
   Log(message.data());
 }
 
+void AFW_ENGINE_CALL RunAllGroupDetour(void* self, void* /*unused*/) {
+  afw::games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(self));
+
+  afw::games::fc3::RunAllGroupFn original{
+      afw::games::fc3::OriginalRunAllGroup()};
+  if (original != nullptr) {
+    original(self, nullptr);
+  }
+}
+
 HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
                                 UINT flags) {
   static std::uint64_t frames{0};
   ++frames;
+
+  afw::games::fc3::PublishCensus();
 
   if (frames % kStatusInterval == 0) {
     LogStatus(frames);
@@ -139,13 +152,51 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
   return original(swapChain, syncInterval, flags);
 }
 
+void Park() {
+  Log("[aimbot] 7/7 running\n");
+  Sleep(INFINITE);
+}
+
+// Nested rather than sequential: both hooks and both bindings are scope-bound,
+// and they have to stay alive until the process ends.
+void InstallUpdateHookAndPark() {
+  std::expected<afw::hook::VmtHook, std::error_code> hook{
+      afw::hook::VmtHook::Create(
+          afw::hook::Vtable{afw::games::fc3::RunAllGroupSlot()}, 0)};
+  if (!hook) {
+    LogFailure("6/7 creating the update hook", hook.error());
+    Park();
+    return;
+  }
+
+  const std::expected<void, std::error_code> kSet{
+      hook->SetDetour(&RunAllGroupDetour)};
+  if (!kSet) {
+    LogFailure("6/7 setting the update detour", kSet.error());
+    Park();
+    return;
+  }
+
+  const afw::games::fc3::UpdateBinding kBound{*hook};
+
+  const std::expected<void, std::error_code> kEnabled{hook->Enable()};
+  if (!kEnabled) {
+    LogFailure("6/7 enabling the update hook", kEnabled.error());
+    Park();
+    return;
+  }
+  Log("[aimbot] 6/7 update hooked\n");
+
+  Park();
+}
+
 DWORD WINAPI OnAttach(LPVOID /*parameter*/) {
-  Log("[aimbot] 1/5 attached\n");
+  Log("[aimbot] 1/7 attached\n");
 
   const std::expected<afw::hook::Vtable, std::error_code> kTable{
       afw::render::ProbeSwapChainVtable()};
   if (!kTable) {
-    LogFailure("2/5 probing the swap chain vtable", kTable.error());
+    LogFailure("2/7 probing the swap chain vtable", kTable.error());
     return 1;
   }
   LogTable(*kTable);
@@ -153,29 +204,29 @@ DWORD WINAPI OnAttach(LPVOID /*parameter*/) {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
       afw::hook::VmtHook::Create(*kTable, afw::render::kPresentSlot)};
   if (!hook) {
-    LogFailure("3/5 creating the Present hook", hook.error());
+    LogFailure("3/7 creating the Present hook", hook.error());
     return 1;
   }
-  Log("[aimbot] 3/5 hook created\n");
+  Log("[aimbot] 3/7 hook created\n");
 
   const std::expected<void, std::error_code> kSet{
       hook->SetDetour(&PresentDetour)};
   if (!kSet) {
-    LogFailure("4/5 setting the Present detour", kSet.error());
+    LogFailure("4/7 setting the Present detour", kSet.error());
     return 1;
   }
-  Log("[aimbot] 4/5 detour set\n");
+  Log("[aimbot] 4/7 detour set\n");
 
   const afw::render::PresentBinding kBound{*hook};
 
   const std::expected<void, std::error_code> kEnabled{hook->Enable()};
   if (!kEnabled) {
-    LogFailure("5/5 enabling the Present hook", kEnabled.error());
+    LogFailure("5/7 enabling the Present hook", kEnabled.error());
     return 1;
   }
-  Log("[aimbot] 5/5 Present hooked\n");
+  Log("[aimbot] 5/7 Present hooked\n");
 
-  Sleep(INFINITE);
+  InstallUpdateHookAndPark();
 
   return 0;
 }

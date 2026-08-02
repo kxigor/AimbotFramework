@@ -28,6 +28,7 @@ template <typename T>
 struct Overlay {
   win::ComPtr<ID3D11Device> device;
   win::ComPtr<ID3D11DeviceContext> context;
+  SurfaceSize backBuffer{};
   bool ready{false};
 };
 
@@ -77,12 +78,18 @@ Overlay& State() noexcept {
 
   win::ComPtr<ID3D11Texture2D> backBuffer{};
   const HRESULT kBuffer{swapChain->GetBuffer(
-      /*Buffer  = */ 0,
-      /*riid    = */ IID_ID3D11Texture2D,
+      /*Buffer    = */ 0,
+      /*riid      = */ IID_ID3D11Texture2D,
       /*ppSurface = */ AsVoid(backBuffer.Put()))};
   if (FAILED(kBuffer)) {
     return std::unexpected{FromHresult(kBuffer)};
   }
+
+  D3D11_TEXTURE2D_DESC surface{};
+  backBuffer->GetDesc(
+      /*pDesc = */ &surface);
+  overlay.backBuffer =
+      SurfaceSize{.width = surface.Width, .height = surface.Height};
 
   win::ComPtr<ID3D11RenderTargetView> target{};
   const HRESULT kTarget{overlay.device->CreateRenderTargetView(
@@ -119,6 +126,8 @@ void BuildFrame(FrameCallback onFrame) {
 }
 
 }  // namespace
+
+SurfaceSize BackBufferSize() noexcept { return State().backBuffer; }
 
 std::expected<void, std::error_code> DrawOverlayFrame(
     IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept {

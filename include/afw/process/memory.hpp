@@ -17,6 +17,10 @@ namespace afw::process {
 
 [[nodiscard]] bool IsReadable(LPCVOID address, SIZE_T size) noexcept;
 
+// Drops the per-thread cache of readable regions. Call it on a frame
+// boundary so a region the game released cannot stay trusted for long.
+void ForgetReadableRegions() noexcept;
+
 template <typename T>
 requires std::is_trivially_copyable_v<T>
 [[nodiscard]] std::expected<T, std::error_code> ReadAt(

@@ -18,7 +18,7 @@ target_include_directories(afw_games_fc3
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(afw_games_fc3 PUBLIC afw::process)
+target_link_libraries(afw_games_fc3 PUBLIC afw::process afw::hook)
 
 if(TARGET project_options)
   target_link_libraries(afw_games_fc3 PRIVATE project_options)

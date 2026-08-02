@@ -2,12 +2,56 @@
 
 #include <afw/process/error.hpp>
 #include <afw/process/memory.hpp>
+#include <algorithm>
+#include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <system_error>
 
 namespace afw::process {
+
+namespace {
+
+struct Region {
+  std::uintptr_t begin{};
+  std::uintptr_t end{};
+};
+
+constexpr std::size_t kCacheSlots{8};
+
+// One cache per thread, so the two readers need no synchronisation. Only
+// readable verdicts are remembered, so a stale entry can only cost a fault the
+// walk already risks.
+[[nodiscard]] std::array<Region, kCacheSlots>& Cache() noexcept {
+  thread_local std::array<Region, kCacheSlots> cache{};
+  return cache;
+}
+
+[[nodiscard]] std::size_t& NextSlot() noexcept {
+  thread_local std::size_t slot{0};
+  return slot;
+}
+
+[[nodiscard]] bool CoveredByCache(std::uintptr_t begin,
+                                  std::uintptr_t end) noexcept {
+  return std::ranges::any_of(Cache(), [begin, end](const Region& region) {
+    return begin >= region.begin && end <= region.end;
+  });
+}
+
+void Remember(std::uintptr_t begin, std::uintptr_t end) noexcept {
+  Cache().at(NextSlot()) = Region{.begin = begin, .end = end};
+  NextSlot() = (NextSlot() + 1) % kCacheSlots;
+}
+
+}  // namespace
+
+void ForgetReadableRegions() noexcept {
+  Cache().fill(Region{});
+  NextSlot() = 0;
+}
 
 std::expected<std::uintptr_t, std::error_code> ModuleBase(
     PCWSTR name) noexcept {
@@ -25,6 +69,12 @@ bool IsReadable(LPCVOID address, SIZE_T size) noexcept {
     return false;
   }
 
+  const std::uintptr_t kBegin{std::bit_cast<std::uintptr_t>(address)};
+  const std::uintptr_t kEnd{kBegin + size};
+  if (CoveredByCache(kBegin, kEnd)) {
+    return true;
+  }
+
   MEMORY_BASIC_INFORMATION info{};
   const SIZE_T kQueried{VirtualQuery(
       /*lpAddress = */ address,
@@ -38,11 +88,16 @@ bool IsReadable(LPCVOID address, SIZE_T size) noexcept {
     return false;
   }
 
-  const std::uintptr_t kStart{std::bit_cast<std::uintptr_t>(address)};
-  const std::uintptr_t kRegionEnd{
-      std::bit_cast<std::uintptr_t>(info.BaseAddress) + info.RegionSize};
+  const std::uintptr_t kRegionBegin{
+      std::bit_cast<std::uintptr_t>(info.BaseAddress)};
+  const std::uintptr_t kRegionEnd{kRegionBegin + info.RegionSize};
+  if (kEnd > kRegionEnd) {
+    return false;
+  }
 
-  return kStart + size <= kRegionEnd;
+  Remember(kRegionBegin, kRegionEnd);
+
+  return true;
 }
 
 }  // namespace afw::process

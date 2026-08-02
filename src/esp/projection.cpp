@@ -8,6 +8,7 @@ namespace afw::esp {
 namespace {
 
 constexpr float kHalf{0.5F};
+constexpr float kMinDepth{0.05F};
 
 [[nodiscard]] float Dot(const Vec3& lhs, const Vec3& rhs) noexcept {
   return (lhs.x * rhs.x) + (lhs.y * rhs.y) + (lhs.z * rhs.z);
@@ -71,7 +72,11 @@ std::optional<ScreenPoint> WorldToScreen(const Matrix4& viewProjection,
                      (world.y * Cell(viewProjection, 1, 3)) +
                      (world.z * Cell(viewProjection, 2, 3)) +
                      Cell(viewProjection, 3, 3)};
-  if (kClipW <= 0.0F) {
+  // w is the view-space depth, so anything nearer than this is outside the
+  // frustum anyway. Rejecting only w <= 0 lets a point a few centimetres in
+  // front through and the divide then throws the result into the tens of
+  // thousands of pixels.
+  if (kClipW < kMinDepth) {
     return std::nullopt;
   }
 
