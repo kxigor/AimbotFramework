@@ -1,6 +1,7 @@
 #include <windows.h>
 
 #include <afw/config/config.hpp>
+#include <afw/core/cast.hpp>
 #include <afw/esp/esp.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/hook/vmt_hook.hpp>
@@ -41,8 +42,7 @@ constexpr int kWindowPollTicks{200};
   if (GetModuleHandleExW(
           /*dwFlags      = */ GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
               GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
-          // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          /*lpModuleName = */ reinterpret_cast<PCWSTR>(&SelfModule),
+          /*lpModuleName = */ afw::core::PointerCast<PCWSTR>(&SelfModule),
           /*phModule     = */ &module) == FALSE) {
     return nullptr;
   }

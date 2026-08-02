@@ -3,6 +3,7 @@
 
 #include <afw/games/fc3/fc3.hpp>
 #include <array>
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -42,7 +43,7 @@ class Fc3CensusUnit : public ::testing::Test {
   void SetUp() override {
     for (const std::uintptr_t kBase : kPreferredBases) {
       page_ = VirtualAlloc(
-          /*lpAddress        = */ reinterpret_cast<LPVOID>(kBase),
+          /*lpAddress        = */ std::bit_cast<LPVOID>(kBase),
           /*dwSize           = */ kBufferBytes,
           /*flAllocationType = */ MEM_COMMIT | MEM_RESERVE,
           /*flProtect        = */ PAGE_READWRITE);
@@ -53,7 +54,7 @@ class Fc3CensusUnit : public ::testing::Test {
     if (page_ == nullptr) {
       GTEST_SKIP() << "no free reservation below 4 GiB for the fake scheduler";
     }
-    base_ = static_cast<std::uint32_t>(reinterpret_cast<std::uintptr_t>(page_));
+    base_ = static_cast<std::uint32_t>(std::bit_cast<std::uintptr_t>(page_));
 
     Poke(kScheduler + kSchedulerGroups, At(kGroupArray));
     Poke(kScheduler + kSchedulerGroupCount, 2);

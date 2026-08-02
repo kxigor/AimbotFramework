@@ -18,28 +18,27 @@
         "AFW_BUILD_DLL": "ON"
       }
     },
+    {
+      "name": "base-x86",
+      "hidden": true,
+      "inherits": ["base"],
+      "description": "Everything the 32-bit presets share. Run them from an MSYS2 MINGW32 shell: no toolchain paths are pinned, so CMake picks up both the compiler and the 32-bit GTest from PATH. AFW_TARGET_POINTER_SIZE makes a wrong shell a configure error instead of a silent 64-bit build. The lint gate stays off because clang-format and clang-tidy do not depend on the target architecture, and the 64-bit presets already run them.",
+      "cacheVariables": {
+        "SANITIZER_MODE": "None",
+        "AFW_TARGET_POINTER_SIZE": "4",
+        "AFW_ENABLE_FORMAT_CHECK": "OFF",
+        "AFW_ENABLE_TIDY_CHECK": "OFF"
+      }
+    },
 
     {
       "name": "dev-debug",
-      "displayName": "Debug + Tests + DLL (GCC, no sanitizer)",
+      "displayName": "Debug + Tests + DLL (GCC)",
       "description": "Primary UCRT64 development build. GCC has no sanitizer runtime, so SANITIZER_MODE stays None.",
       "inherits": ["base"],
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "SANITIZER_MODE": "None"
-      }
-    },
-    {
-      "name": "dev-debug-x86",
-      "displayName": "Debug + Tests + DLL (GCC i686)",
-      "description": "32-bit build; run it from an MSYS2 MINGW32 shell. Far Cry 3 is a 32-bit process, so the injector and the DLL that ship must come from here. No toolchain paths are pinned: CMake picks up both the compiler and the 32-bit GTest from PATH, the same way dev-debug does for the 64-bit environment. AFW_TARGET_POINTER_SIZE makes a wrong shell a configure error instead of a silent 64-bit build.",
-      "inherits": ["base"],
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "SANITIZER_MODE": "None",
-        "AFW_TARGET_POINTER_SIZE": "4",
-        "AFW_ENABLE_FORMAT_CHECK": "OFF",
-        "AFW_ENABLE_TIDY_CHECK": "OFF"
       }
     },
     {
@@ -97,29 +96,55 @@
         "SANITIZER_MODE": "None",
         "AFW_BUILD_TESTS": "OFF"
       }
+    },
+
+    {
+      "name": "dev-debug-x86",
+      "displayName": "Debug + Tests + DLL (GCC i686)",
+      "description": "The 32-bit development build. Far Cry 3 is a 32-bit process, so the injector and the DLL that ship have to come from a 32-bit preset.",
+      "inherits": ["base-x86"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "ci-relwithdebinfo-x86",
+      "displayName": "RelWithDebInfo + Tests (GCC i686)",
+      "description": "Optimised and still carrying symbols. The one to reach for when the game crashes and the stack has to be readable.",
+      "inherits": ["base-x86"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "ci-release-x86",
+      "displayName": "Release DLL + injector (GCC i686)",
+      "description": "The pair that ships into the game. Tests off. This is also the smallest image: a 32-bit process has little address space left once the engine and the display driver are mapped, and the loader needs the DLL's SizeOfImage as one free run.",
+      "inherits": ["base-x86"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "AFW_BUILD_TESTS": "OFF"
+      }
     }
   ],
 
   "buildPresets": [
     { "name": "dev-debug", "configurePreset": "dev-debug" },
-    { "name": "dev-debug-x86", "configurePreset": "dev-debug-x86" },
     { "name": "dev-debug-asan", "configurePreset": "dev-debug-asan" },
     { "name": "dev-debug-ubsan", "configurePreset": "dev-debug-ubsan" },
     { "name": "ci-coverage", "configurePreset": "ci-coverage" },
     { "name": "ci-relwithdebinfo", "configurePreset": "ci-relwithdebinfo" },
-    { "name": "ci-release", "configurePreset": "ci-release" }
+    { "name": "ci-release", "configurePreset": "ci-release" },
+
+    { "name": "dev-debug-x86", "configurePreset": "dev-debug-x86" },
+    { "name": "ci-relwithdebinfo-x86", "configurePreset": "ci-relwithdebinfo-x86" },
+    { "name": "ci-release-x86", "configurePreset": "ci-release-x86" }
   ],
 
   "testPresets": [
     {
       "name": "dev-debug",
       "configurePreset": "dev-debug",
-      "output": { "outputOnFailure": true },
-      "execution": { "stopOnFailure": true }
-    },
-    {
-      "name": "dev-debug-x86",
-      "configurePreset": "dev-debug-x86",
       "output": { "outputOnFailure": true },
       "execution": { "stopOnFailure": true }
     },
@@ -136,6 +161,18 @@
     {
       "name": "ci-relwithdebinfo",
       "configurePreset": "ci-relwithdebinfo",
+      "output": { "outputOnFailure": true }
+    },
+
+    {
+      "name": "dev-debug-x86",
+      "configurePreset": "dev-debug-x86",
+      "output": { "outputOnFailure": true },
+      "execution": { "stopOnFailure": true }
+    },
+    {
+      "name": "ci-relwithdebinfo-x86",
+      "configurePreset": "ci-relwithdebinfo-x86",
       "output": { "outputOnFailure": true }
     }
   ]

@@ -100,11 +100,13 @@ LocalLoadLibraryRoutine() {
   }
 
   // kernel32.dll is mapped at the same base in every process of a session, so
-  // the local address of LoadLibraryW is also valid in the target process.
-  // LoadLibraryW's signature differs from LPTHREAD_START_ROUTINE, but on x64
-  // the two are ABI-compatible (one pointer in, pointer-sized value out) --
-  // that is what makes the CreateRemoteThread trick work. The type-mismatch
-  // cast is therefore intentional; silence -Wcast-function-type just for it.
+  // the local address of LoadLibraryW is also valid in the target process. Its
+  // signature differs from LPTHREAD_START_ROUTINE, but the two are
+  // ABI-compatible -- one pointer in, a pointer-sized value out -- and that is
+  // what makes the CreateRemoteThread trick work. This one cast is spelled out
+  // rather than routed through core::PointerCast: -Wcast-function-type fires in
+  // the template's body, where a pragma at the call site cannot reach it, and
+  // suppressing it inside the shared helper would silence it for every caller.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)

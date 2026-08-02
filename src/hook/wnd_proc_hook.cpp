@@ -3,25 +3,12 @@
 #include <afw/hook/error.hpp>
 #include <afw/hook/wnd_proc_hook.hpp>
 #include <afw/win/error.hpp>
+#include <bit>
 #include <expected>
 #include <system_error>
 #include <tuple>
 
 namespace afw::hook {
-
-namespace {
-
-[[nodiscard]] WNDPROC AsWndProc(LONG_PTR value) noexcept {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
-  return reinterpret_cast<WNDPROC>(value);
-}
-
-[[nodiscard]] LONG_PTR AsLong(WNDPROC value) noexcept {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  return reinterpret_cast<LONG_PTR>(value);
-}
-
-}  // namespace
 
 std::expected<WndProcHook, std::error_code> WndProcHook::Create(
     HWND window) noexcept {
@@ -40,7 +27,7 @@ std::expected<WndProcHook, std::error_code> WndProcHook::Create(
   }
 
   return std::expected<WndProcHook, std::error_code>{
-      std::in_place, AdoptTag{}, window, AsWndProc(kCurrent)};
+      std::in_place, AdoptTag{}, window, std::bit_cast<WNDPROC>(kCurrent)};
 }
 
 WndProcHook::WndProcHook(AdoptTag /*tag*/, HWND window,
@@ -100,7 +87,7 @@ std::expected<void, std::error_code> WndProcHook::Swap(WNDPROC value) noexcept {
   const LONG_PTR kPrevious{SetWindowLongPtrW(
       /*hWnd      = */ window_,
       /*nIndex    = */ GWLP_WNDPROC,
-      /*dwNewLong = */ AsLong(value))};
+      /*dwNewLong = */ std::bit_cast<LONG_PTR>(value))};
   if (kPrevious == 0 && GetLastError() != 0) {
     return std::unexpected{win::LastError()};
   }

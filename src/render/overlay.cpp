@@ -5,9 +5,11 @@
 #include <imgui_impl_win32.h>
 #include <windows.h>
 
+#include <afw/core/cast.hpp>
 #include <afw/render/overlay.hpp>
 #include <afw/win/com_ptr.hpp>
 #include <array>
+#include <bit>
 #include <expected>
 #include <system_error>
 
@@ -17,8 +19,7 @@ namespace {
 
 template <typename T>
 [[nodiscard]] void** AsVoid(T** slot) noexcept {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-  return reinterpret_cast<void**>(slot);
+  return core::PointerCast<void**>(slot);
 }
 
 [[nodiscard]] std::error_code FromHresult(HRESULT result) noexcept {

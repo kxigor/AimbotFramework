@@ -3,6 +3,7 @@
 
 #include <afw/hook/error.hpp>
 #include <afw/hook/wnd_proc_hook.hpp>
+#include <bit>
 #include <expected>
 #include <system_error>
 
@@ -54,8 +55,7 @@ class ProbeWindow {
 };
 
 [[nodiscard]] WNDPROC CurrentProc(HWND window) noexcept {
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast,performance-no-int-to-ptr)
-  return reinterpret_cast<WNDPROC>(GetWindowLongPtrW(window, GWLP_WNDPROC));
+  return std::bit_cast<WNDPROC>(GetWindowLongPtrW(window, GWLP_WNDPROC));
 }
 
 }  // namespace

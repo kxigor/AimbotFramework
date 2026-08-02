@@ -13,6 +13,14 @@ is the aim assist on top of it.
 
 `afw` = **A**imbot**F**rame**w**ork (namespace / target prefix).
 
+![The overlay running in Far Cry 3](docs/images/esp-overlay.png)
+
+Everything in that frame is drawn by the injected DLL: the `ESP` panel on the
+left with the camera pointer chain and the entity census, the menu with the
+feature toggle and the unload button, the boxes over the entities down the road,
+and the two calibration markers at the centre — green two metres straight ahead,
+orange two metres to the right at ten.
+
 ## Status
 
 Implemented:
@@ -257,6 +265,8 @@ cmake/                  ProjectOptions / Sanitizers / Coverage / Format / Tidy /
 third_party/
   imgui/                Dear ImGui, git submodule pinned to a release tag
   CMakeLists.txt        its build file, kept outside the submodule
+docs/
+  images/               screenshots referenced from this file
 include/afw/            public headers (sibling of src/)
   win/ remote/ hook/ process/ render/ esp/ menu/ config/ games/fc3/  implemented
   aimbot/                                                            skeleton
@@ -332,12 +342,26 @@ pacman -S --needed mingw-w64-i686-gcc mingw-w64-i686-gtest
 cmake --preset dev-debug-x86
 cmake --build --preset dev-debug-x86
 ctest --preset dev-debug-x86
+
+# and the pair that ships into the game
+cmake --preset ci-release-x86
+cmake --build --preset ci-release-x86
 ```
 
 No toolchain paths are pinned anywhere: CMake picks up both the compiler and the
 32-bit GTest from the shell's `PATH`, exactly as `dev-debug` does for the 64-bit
-environment, so this works wherever MSYS2 is installed. `cmake` and `ninja` from
-any environment will do — they are architecture-independent build drivers.
+environment, so this works wherever MSYS2 is installed.
+
+`cmake` and `ninja` are architecture-independent build drivers, but MINGW32 does
+not ship them, so a bare MINGW32 shell fails the configure with *"unable to find
+a build program corresponding to Ninja"*. Either install the 32-bit packages or,
+simpler, put UCRT64 on `PATH` **after** MINGW32 so the compiler still resolves to
+the 32-bit one:
+
+```sh
+export PATH="/c/msys64/mingw32/bin:/c/msys64/ucrt64/bin:$PATH"
+export MSYSTEM=MINGW32
+```
 
 Running a preset from the wrong shell is a configure error rather than a silent
 build of the other architecture: `dev-debug-x86` declares
@@ -405,19 +429,34 @@ Two things make that safe, and both had to be learned the hard way:
 
 ### Presets
 
+64-bit, from UCRT64:
+
 | Preset              | Type           | Notes                                  |
 |---------------------|----------------|----------------------------------------|
 | `dev-debug`         | Debug          | GCC, no sanitizer (default dev build)  |
-| `dev-debug-x86`     | Debug          | MINGW32, the build that runs in game   |
 | `dev-debug-asan`    | Debug          | ASan+UBSan, forces `clang++`           |
 | `dev-debug-ubsan`   | Debug          | UBSan, forces `clang++`                |
 | `ci-coverage`       | Debug          | gcov instrumentation                   |
 | `ci-relwithdebinfo` | RelWithDebInfo | tests on                               |
 | `ci-release`        | Release        | `aimbot.dll` only, tests off           |
 
+32-bit, from MINGW32 — these are the ones that run in the game:
+
+| Preset                  | Type           | Notes                                    |
+|-------------------------|----------------|------------------------------------------|
+| `dev-debug-x86`         | Debug          | the everyday build                       |
+| `ci-relwithdebinfo-x86` | RelWithDebInfo | optimised, keeps symbols for stacks      |
+| `ci-release-x86`        | Release        | the shipping pair, tests off             |
+
+All three inherit a hidden `base-x86` that carries `AFW_TARGET_POINTER_SIZE=4`
+and switches the lint gate off, so a new 32-bit preset cannot forget either.
+
 > Thread/Memory sanitizers are intentionally absent: they do not exist on
 > Windows for any toolchain. GCC ships no sanitizer runtime at all, so ASan/UBSan
-> presets use Clang.
+> presets use Clang — and there are no 32-bit sanitizer presets for the same
+> reason, one level worse: the 32-bit MinGW toolchain has no sanitizer runtime
+> to point Clang at either. Coverage has no 32-bit preset because the source is
+> the same and `ci-coverage` already measures it.
 
 ## Options
 

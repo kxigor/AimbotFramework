@@ -2,9 +2,11 @@
 #include <dxgi.h>
 #include <windows.h>
 
+#include <afw/core/cast.hpp>
 #include <afw/hook/vtable.hpp>
 #include <afw/render/render.hpp>
 #include <afw/win/error.hpp>
+#include <bit>
 #include <expected>
 #include <system_error>
 
@@ -93,8 +95,7 @@ void DestroyProbeWindow(HWND window, HINSTANCE instance) noexcept {
     return std::unexpected{std::error_code{kResult, std::system_category()}};
   }
 
-  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast,misc-const-correctness)
-  void** const kVtable{*reinterpret_cast<void***>(swapChain)};
+  void** const kVtable{*core::PointerCast<void***>(swapChain)};
 
   context->Release();
   device->Release();
