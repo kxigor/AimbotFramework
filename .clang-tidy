@@ -22,6 +22,7 @@ Checks: >
   -bugprone-easily-swappable-parameters,
   -misc-use-internal-linkage,
   -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
   -llvm-prefer-static-over-anonymous-namespace,
   -portability-avoid-pragma-once,
   -cppcoreguidelines-pro-type-vararg,
@@ -34,6 +35,12 @@ WarningsAsErrors: '*'
 #      keep external linkage; the check would wrongly push them to `static`.
 #   -misc-include-cleaner : windows.h is an umbrella header, so every Win32 type
 #      (HINSTANCE, DWORD, LPVOID, ...) trips "no header directly provides X".
+#   -misc-non-private-member-variables-in-classes : it fires on any struct that
+#      has a method, and the types read straight out of the game's memory
+#      (afw::math Vec3, Aabb, Matrix4) must stay trivially copyable aggregates
+#      -- private members would end that and take ReadAt with it. The
+#      cppcoreguidelines- variant of the same check is left on: it already
+#      ignores types whose members are all public, which is exactly this case.
 #   -llvm-prefer-static-over-anonymous-namespace : it contradicts
 #      misc-use-anonymous-namespace, which is also enabled -- one demands
 #      `static`, the other an anonymous namespace, and no code satisfies both.

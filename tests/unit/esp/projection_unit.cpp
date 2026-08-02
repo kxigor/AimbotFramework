@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <afw/esp/projection.hpp>
+#include <afw/math/matrix4.hpp>
 #include <numbers>
 #include <optional>
 
@@ -25,7 +26,7 @@ constexpr afw::esp::Vec3 kRight{.x = 1.0F, .y = 0.0F, .z = 0.0F};
 
 [[nodiscard]] afw::esp::Matrix4 DefaultViewProjection(
     const afw::esp::Vec3& eye = kOrigin) {
-  return afw::esp::Multiply(
+  return afw::math::Multiply(
       afw::esp::BuildView(eye, kForward, kUp, kRight),
       afw::esp::BuildProjection(kFov, kAspect, kNear, kFar));
 }
@@ -95,11 +96,11 @@ TEST(EspProjectionUnit, NearAndFarDoNotMoveTheScreenPoint) {
       afw::esp::BuildView(kOrigin, kForward, kUp, kRight)};
 
   const std::optional<afw::esp::ScreenPoint> kTight{afw::esp::WorldToScreen(
-      afw::esp::Multiply(
+      afw::math::Multiply(
           kView, afw::esp::BuildProjection(kFov, kAspect, 0.01F, 100.0F)),
       kWorld, kWidth, kHeight)};
   const std::optional<afw::esp::ScreenPoint> kWide{afw::esp::WorldToScreen(
-      afw::esp::Multiply(
+      afw::math::Multiply(
           kView, afw::esp::BuildProjection(kFov, kAspect, 5.0F, 90000.0F)),
       kWorld, kWidth, kHeight)};
 
@@ -125,7 +126,7 @@ TEST(EspProjectionUnit, TheBasisIsUsedRatherThanTheWorldAxes) {
   const afw::esp::Vec3 kRightOfThat{.x = 0.0F, .y = 0.0F, .z = -1.0F};
 
   const std::optional<afw::esp::ScreenPoint> kPoint{afw::esp::WorldToScreen(
-      afw::esp::Multiply(
+      afw::math::Multiply(
           afw::esp::BuildView(kOrigin, kLookRight, kUp, kRightOfThat),
           afw::esp::BuildProjection(kFov, kAspect, kNear, kFar)),
       {.x = 10.0F, .y = 0.0F, .z = 0.0F}, kWidth, kHeight)};
@@ -145,7 +146,7 @@ TEST(EspProjectionUnit, MultiplyMatchesAHandComputedProduct) {
                                          0.0F, 0.0F, 2.0F, 0.0F,  //
                                          0.0F, 5.0F, 0.0F, 1.0F}};
 
-  const afw::esp::Matrix4 kProduct{afw::esp::Multiply(kLhs, kRhs)};
+  const afw::esp::Matrix4 kProduct{afw::math::Multiply(kLhs, kRhs)};
 
   EXPECT_NEAR(kProduct.cells.at(0), 2.0F, kTolerance);
   EXPECT_NEAR(kProduct.cells.at(1), 4.0F, kTolerance);
@@ -161,8 +162,8 @@ TEST(EspProjectionUnit, TheOrderOfMultiplicationMatters) {
   const afw::esp::Matrix4 kProjection{
       afw::esp::BuildProjection(kFov, kAspect, kNear, kFar)};
 
-  const afw::esp::Matrix4 kCorrect{afw::esp::Multiply(kView, kProjection)};
-  const afw::esp::Matrix4 kSwapped{afw::esp::Multiply(kProjection, kView)};
+  const afw::esp::Matrix4 kCorrect{afw::math::Multiply(kView, kProjection)};
+  const afw::esp::Matrix4 kSwapped{afw::math::Multiply(kProjection, kView)};
 
   EXPECT_NE(kCorrect.cells, kSwapped.cells);
 }

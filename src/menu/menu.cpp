@@ -5,8 +5,6 @@
 #include <afw/config/config.hpp>
 #include <afw/menu/menu.hpp>
 
-// The backend keeps this one behind an "#if 0" so its header stays free of
-// <windows.h>, and asks every caller to repeat the line.
 // NOLINTNEXTLINE(readability-identifier-naming)
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
                                                              UINT msg,
@@ -62,8 +60,6 @@ void Draw() noexcept {
     return;
   }
 
-  // The game confines the cursor for mouse look and does so again whenever it
-  // regains focus, so releasing it once on the toggle is not enough.
   ClipCursor(
       /*lpRect = */ nullptr);
 

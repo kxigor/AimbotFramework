@@ -21,9 +21,6 @@ struct Region {
 
 constexpr std::size_t kCacheSlots{8};
 
-// One cache per thread, so the two readers need no synchronisation. Only
-// readable verdicts are remembered, so a stale entry can only cost a fault the
-// walk already risks.
 [[nodiscard]] std::array<Region, kCacheSlots>& Cache() noexcept {
   thread_local std::array<Region, kCacheSlots> cache{};
   return cache;

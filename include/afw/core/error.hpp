@@ -5,10 +5,6 @@
 
 namespace afw::core {
 
-// One category instance per library, identified by address, so two codes carry
-// the same meaning only when they came from the same library. Each library
-// supplies CategoryName and Describe for its own enum next to that enum, and
-// argument-dependent lookup finds them from here.
 template <typename Enum>
 class ErrorCategory final : public std::error_category {
  public:

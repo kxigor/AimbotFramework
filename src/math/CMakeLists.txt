@@ -1,29 +1,18 @@
 # =========================================================
-# afw::math  (STATIC)
+# afw::math  (INTERFACE)
 # =========================================================
-# Vector and matrix types shared by everything that does geometry. Vec3 is also
-# the wire format the engine's structures are read into, which is why it stays a
-# trivially copyable aggregate (see include/afw/math/vec3.hpp). No Win32
-# dependency, so it is built on every platform.
+# Vec3, Aabb and Matrix4. Header-only: every one of these is a handful of float
+# operations on the path each entity takes each frame, and there is no LTO in
+# this build, so an out-of-line definition could never be inlined into its
+# callers. They are also the wire format the engine's structures are read into,
+# which is why they stay trivially copyable aggregates.
 
-add_library(afw_math STATIC
-  vec3.cpp
-)
+add_library(afw_math INTERFACE)
 add_library(afw::math ALIAS afw_math)
 
-target_compile_features(afw_math PUBLIC cxx_std_23)
+target_compile_features(afw_math INTERFACE cxx_std_23)
 
 target_include_directories(afw_math
-  PUBLIC
+  INTERFACE
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
 )
-
-if(TARGET project_options)
-  target_link_libraries(afw_math PRIVATE project_options)
-endif()
-if(TARGET project_sanitizers)
-  target_link_libraries(afw_math PRIVATE project_sanitizers)
-endif()
-if(TARGET project_coverage)
-  target_link_libraries(afw_math PRIVATE project_coverage)
-endif()

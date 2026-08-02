@@ -6,6 +6,13 @@
 
 namespace afw::games::fc3 {
 
+// Where things sit in the game's memory. Everything here is a fact about the
+// binary; what counts as a plausible value read from it lives in limits.hpp.
+
+// Far Cry 3 is a 32-bit process, so every pointer it stores is four bytes wide
+// whatever this build's uintptr_t happens to be.
+using EnginePtr = std::uint32_t;
+
 constexpr PCWSTR kModuleName{L"FC3_d3d11.dll"};
 constexpr std::uintptr_t kGhidraImageBase{0x10000000};
 
@@ -37,46 +44,18 @@ constexpr std::uintptr_t kGroupEntityGroup{0x08};
 constexpr std::uintptr_t kEntityGroupArray{0x04};
 constexpr std::uintptr_t kEntityGroupCount{0x08};
 
-constexpr std::uint32_t kMaxGroups{256};
-constexpr std::uint32_t kMaxGroupEntities{4096};
+// The row-major world matrix: rows 0..2 are the axes, row 3 at +0x50 is the
+// position. Read whole rather than row by row.
+constexpr std::uintptr_t kEntityTransform{0x20};
+// min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
+// read.
+constexpr std::uintptr_t kEntityAabb{0x6C};
 
-// Rows of the row-major world matrix at +0x20; row 3 is the translation.
-constexpr std::uintptr_t kEntityAxisX{0x20};
-constexpr std::uintptr_t kEntityAxisY{0x30};
-constexpr std::uintptr_t kEntityAxisZ{0x40};
-constexpr std::uintptr_t kEntityPosition{0x50};
-constexpr std::uintptr_t kEntityAabbMin{0x6C};
-constexpr std::uintptr_t kEntityAabbMax{0x78};
 constexpr std::uintptr_t kPawnIsDead{0x258};
-constexpr std::uintptr_t kPawnArmy{0x284};
-constexpr std::uintptr_t kPawnFaction{0x290};
-
-// 0 Blue, 1 Red, 2 Grey, 3 Neutral, 4 Green, 5 Yellow.
-constexpr std::int32_t kMaxArmy{5};
-constexpr std::int32_t kMaxFaction{3};
-
 constexpr std::uintptr_t kPawnOwnArmyBit{0x280};
 constexpr std::uintptr_t kPawnHostileMask{0x281};
 constexpr std::uintptr_t kPawnReverseHostile{0x283};
-
-// Template and system entities all sit here with an identity transform.
-constexpr float kTemplateCoordinate{-5248.0F};
-constexpr float kTemplateTolerance{1.0F};
-constexpr float kMaxWorldCoordinate{100000.0F};
-constexpr float kMinHeight{0.2F};
-constexpr float kMaxHeight{20.0F};
-
-// A humanoid's object-space box, from the same family of measurements as the
-// height bounds above.
-constexpr float kHumanoidMinHeight{1.3F};
-constexpr float kHumanoidMaxHeight{2.3F};
-constexpr float kHumanoidMaxWidth{1.5F};
-constexpr float kHumanoidFootTolerance{0.4F};
-
-constexpr float kUnitTolerance{0.05F};
-constexpr float kAxisTolerance{0.05F};
-constexpr float kMaxBoxSpan{500.0F};
-constexpr float kMinFov{0.1F};
-constexpr float kMaxFov{3.0F};
+constexpr std::uintptr_t kPawnArmy{0x284};
+constexpr std::uintptr_t kPawnFaction{0x290};
 
 }  // namespace afw::games::fc3

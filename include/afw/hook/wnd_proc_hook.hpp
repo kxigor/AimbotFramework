@@ -7,10 +7,6 @@
 
 namespace afw::hook {
 
-// Hook over a window procedure, installed with SetWindowLongPtrW and undone on
-// destruction. Shaped like VmtHook: the factory is the only way in, so no
-// half-valid object exists, and the original is captured before the detour is
-// ever named.
 class WndProcHook {
   struct AdoptTag {};
 

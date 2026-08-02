@@ -38,17 +38,13 @@ constexpr ImU32 kAheadColour{0xFF00FF00};
 constexpr ImU32 kRightColour{0xFF0080FF};
 constexpr ImU32 kPropColour{0xC000FF40};
 constexpr ImU32 kDeadColour{0x80606060};
-// Humanoid by box shape but not confirmed a pawn by class.
 constexpr ImU32 kHumanoidColour{0xFF00D0FF};
 
-// By army number: Blue, Red, Grey, Neutral, Green, Yellow. Friend or foe needs
-// the local player's army, which is not read yet.
 constexpr std::array<ImU32, 6> kArmyColours{0xFFFF6030, 0xFF3030FF, 0xFFA0A0A0,
                                             0xFFFFFFFF, 0xFF30FF30, 0xFF30FFFF};
 
 constexpr float kDrawDistance{150.0F};
 constexpr float kPropRadius{2.0F};
-constexpr std::size_t kBoxCorners{8};
 constexpr float kBoxThickness{1.5F};
 constexpr float kLabelLift{14.0F};
 constexpr std::size_t kLabelChars{64};
@@ -57,7 +53,6 @@ constexpr float kAimTolerance{0.95F};
 constexpr float kPanelWidth{470.0F};
 constexpr float kPanelHeight{820.0F};
 
-// The engine derives its vertical half-angle from the horizontal one.
 [[nodiscard]] float VerticalFov(float horizontalRadians,
                                 float aspect) noexcept {
   return kFullAngle * std::atan(std::tan(horizontalRadians * kHalfF) / aspect);
@@ -161,16 +156,6 @@ struct ScreenRect {
   float bottom{};
 };
 
-// world = local * M, with M's basis rows in axisX/Y/Z and its translation row
-// in position.
-[[nodiscard]] Vec3 ToWorld(const games::fc3::EntityInfo& entity,
-                           const Vec3& local) noexcept {
-  return entity.position + (entity.axisX * local.x) + (entity.axisY * local.y) +
-         (entity.axisZ * local.z);
-}
-
-// The screen bounding rectangle of the box's eight corners, so the yaw and the
-// off-centre depth spread are both accounted for.
 [[nodiscard]] std::optional<ScreenRect> ProjectBox(
     const games::fc3::EntityInfo& entity, const Matrix4& projection,
     const ImVec2& display) noexcept {
@@ -179,14 +164,10 @@ struct ScreenRect {
                   .right = std::numeric_limits<float>::lowest(),
                   .bottom = std::numeric_limits<float>::lowest()};
 
-  for (std::size_t corner{0}; corner < kBoxCorners; ++corner) {
-    const Vec3 kLocal{
-        .x = ((corner & 1U) != 0U) ? entity.aabbMax.x : entity.aabbMin.x,
-        .y = ((corner & 2U) != 0U) ? entity.aabbMax.y : entity.aabbMin.y,
-        .z = ((corner & 4U) != 0U) ? entity.aabbMax.z : entity.aabbMin.z};
-
+  for (std::size_t corner{0}; corner < math::kAabbCorners; ++corner) {
     const std::optional<ScreenPoint> kPoint{WorldToScreen(
-        projection, ToWorld(entity, kLocal), display.x, display.y)};
+        projection, entity.transform.TransformPoint(entity.box.Corner(corner)),
+        display.x, display.y)};
     if (!kPoint) {
       return std::nullopt;
     }
@@ -213,11 +194,11 @@ void DrawPawn(const games::fc3::EntityInfo& entity, const Matrix4& projection,
   }
 
   ImU32 colour{kHumanoidColour};
-  if (entity.dead) {
-    colour = kDeadColour;
-  } else if (entity.pawn) {
-    colour = kArmyColours.at(static_cast<std::size_t>(entity.army) %
-                             kArmyColours.size());
+  if (entity.pawn) {
+    colour = entity.pawn->dead
+                 ? kDeadColour
+                 : kArmyColours.at(static_cast<std::size_t>(entity.pawn->army) %
+                                   kArmyColours.size());
   }
   const ImU32 kColour{colour};
 
@@ -228,8 +209,9 @@ void DrawPawn(const games::fc3::EntityInfo& entity, const Matrix4& projection,
   std::array<char, kLabelChars> label{};
   std::snprintf(label.data(), label.size(), "%llX h%.1f %s%d",
                 static_cast<std::uint64_t>(entity.vtable),
-                static_cast<double>(entity.height),
-                entity.pawn ? "a" : "shape a", entity.army);
+                static_cast<double>(entity.box.Extent().z),
+                entity.pawn ? "a" : "shape a",
+                entity.pawn ? entity.pawn->army : 0);
   ImGui::GetBackgroundDrawList()->AddText(
       ImVec2{kRect->left, kRect->top - kLabelLift}, kColour, label.data());
 }
@@ -240,17 +222,17 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    if (DistanceTo(eye, kEntity.position) > kDrawDistance) {
+    if (DistanceTo(eye, kEntity.transform.Translation()) > kDrawDistance) {
       continue;
     }
 
-    if ((kEntity.pawn || kEntity.humanoid) && kEntity.height > 0.0F) {
+    if (kEntity.humanoid) {
       DrawPawn(kEntity, projection, display);
       continue;
     }
 
-    const std::optional<ScreenPoint> kPoint{
-        WorldToScreen(projection, kEntity.position, display.x, display.y)};
+    const std::optional<ScreenPoint> kPoint{WorldToScreen(
+        projection, kEntity.transform.Translation(), display.x, display.y)};
     if (kPoint) {
       ImGui::GetBackgroundDrawList()->AddCircleFilled(
           ImVec2{kPoint->x, kPoint->y}, kPropRadius, kPropColour);
@@ -263,7 +245,6 @@ void ShowVector(const char* label, const Vec3& value) {
               static_cast<double>(value.y), static_cast<double>(value.z));
 }
 
-// Whatever sits nearest the crosshair, dumped raw.
 void ShowInspector(const Vec3& eye, const Vec3& forward) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
@@ -273,7 +254,7 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    const Vec3 kDelta{kEntity.position - eye};
+    const Vec3 kDelta{kEntity.transform.Translation() - eye};
     const float kDistance{kDelta.Length()};
     if (kDistance < 1.0F || kDistance > kDrawDistance) {
       continue;
@@ -299,15 +280,18 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
   ImGui::Text("%-14s %llX", "vtable",
               static_cast<std::uint64_t>(nearest->vtable));
   ImGui::Text("%-14s %.1f m", "distance", static_cast<double>(bestDistance));
-  ShowVector("position", nearest->position);
-  ShowVector("aabb min", nearest->aabbMin);
-  ShowVector("aabb max", nearest->aabbMax);
-  ImGui::Text("%-14s %d  faction %d  dead %u  pawn %d", "army", nearest->army,
-              nearest->faction, nearest->deadByte,
-              static_cast<int>(nearest->pawn));
+  ShowVector("position", nearest->transform.Translation());
+  ShowVector("aabb min", nearest->box.min);
+  ShowVector("aabb max", nearest->box.max);
+  if (!nearest->pawn) {
+    ImGui::TextUnformatted("not a pawn: no army fields");
+    return;
+  }
+  const games::fc3::PawnInfo& kPawn{*nearest->pawn};
+  ImGui::Text("%-14s %d  faction %d  dead %u", "army", kPawn.army,
+              kPawn.faction, kPawn.deadByte);
   ImGui::Text("%-14s own %02X  hostile %02X  reverse %02X", "masks",
-              nearest->ownArmyBit, nearest->hostileMask,
-              nearest->reverseHostileMask);
+              kPawn.ownArmyBit, kPawn.hostileMask, kPawn.reverseHostileMask);
 }
 
 struct VtableTally {
@@ -368,7 +352,6 @@ void ShowVtables() {
   }
 }
 
-// Which heap pool the walk is actually reaching.
 void ShowPools(const Vec3& eye) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
@@ -382,7 +365,7 @@ void ShowPools(const Vec3& eye) {
       low = kEntity.address;
     }
     high = std::max(kEntity.address, high);
-    if (DistanceTo(eye, kEntity.position) <= kDrawDistance) {
+    if (DistanceTo(eye, kEntity.transform.Translation()) <= kDrawDistance) {
       ++nearby;
     }
   }

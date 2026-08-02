@@ -17,8 +17,6 @@ namespace afw::process {
 
 [[nodiscard]] bool IsReadable(LPCVOID address, SIZE_T size) noexcept;
 
-// Drops the per-thread cache of readable regions. Call it on a frame
-// boundary so a region the game released cannot stay trusted for long.
 void ForgetReadableRegions() noexcept;
 
 template <typename T>
@@ -30,13 +28,19 @@ requires std::is_trivially_copyable_v<T>
     return std::unexpected{make_error_code(Error::NotReadable)};
   }
 
-  // Through void*: the requires clause above already states the precondition
-  // -Wclass-memaccess exists to guess at, and value is value-initialised here,
-  // so there is nothing for the copy to clobber.
   T value{};
   std::memcpy(static_cast<void*>(&value), source, sizeof(T));
 
   return value;
+}
+
+template <typename TargetPointer>
+requires std::is_unsigned_v<TargetPointer> &&
+         (sizeof(TargetPointer) <= sizeof(std::uintptr_t))
+[[nodiscard]] std::expected<std::uintptr_t, std::error_code> ReadPointerAs(
+    std::uintptr_t address) noexcept {
+  return ReadAt<TargetPointer>(address).transform(
+      [](TargetPointer value) { return static_cast<std::uintptr_t>(value); });
 }
 
 }  // namespace afw::process

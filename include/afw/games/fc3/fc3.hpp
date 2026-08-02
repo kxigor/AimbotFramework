@@ -1,7 +1,7 @@
 #pragma once
 
 #include <afw/abi/abi.hpp>
-#include <afw/games/fc3/internal.hpp>
+#include <afw/games/fc3/internal/structs.hpp>
 #include <afw/hook/vmt_hook.hpp>
 #include <array>
 #include <cstddef>
@@ -61,7 +61,6 @@ class UpdateBinding {
 
 constexpr std::size_t kMaxEntities{4096};
 
-// Filled on the update thread, swapped in on the frame boundary.
 struct EntitySnapshot {
   std::uint32_t count{};
   std::uint32_t dropped{};

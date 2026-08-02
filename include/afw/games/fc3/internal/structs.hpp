@@ -1,13 +1,18 @@
 #pragma once
 
+#include <afw/math/aabb.hpp>
+#include <afw/math/matrix4.hpp>
 #include <afw/math/vec3.hpp>
 #include <cstdint>
+#include <optional>
 
 namespace afw::games::fc3 {
 
-// The engine stores three consecutive floats wherever a point or an axis goes,
-// which is exactly Vec3's layout, so these are read straight out of its memory
-// with no intermediate type.
+// The engine stores points, axes and boxes as runs of consecutive floats, which
+// is what these types already are, so they are read straight out of its memory
+// with no intermediate representation.
+using math::Aabb;
+using math::Matrix4;
 using math::Vec3;
 
 struct CameraBasis {
@@ -24,26 +29,27 @@ struct Viewport {
   float height{};
 };
 
-struct EntityInfo {
-  std::uintptr_t address{};
-  std::uintptr_t vtable{};
-  Vec3 position{};
-  // The object's own axes in world space; the box at +0x6C is in that space.
-  Vec3 axisX{};
-  Vec3 axisY{};
-  Vec3 axisZ{};
-  Vec3 aabbMin{};
-  Vec3 aabbMax{};
-  float height{};
+// Present only on an entity that passed the army invariant, so every field here
+// is meaningful whenever the record itself is.
+struct PawnInfo {
   std::int32_t army{};
   std::int32_t faction{};
   std::uint8_t ownArmyBit{};
   std::uint8_t hostileMask{};
   std::uint8_t reverseHostileMask{};
   std::uint8_t deadByte{};
-  bool pawn{};
-  bool humanoid{};
   bool dead{};
+};
+
+struct EntityInfo {
+  std::uintptr_t address{};
+  std::uintptr_t vtable{};
+  // Rows 0..2 are the object's axes in world space, row 3 its position. The box
+  // is in that same object space.
+  Matrix4 transform{};
+  Aabb box{};
+  std::optional<PawnInfo> pawn;
+  bool humanoid{};
 };
 
 }  // namespace afw::games::fc3

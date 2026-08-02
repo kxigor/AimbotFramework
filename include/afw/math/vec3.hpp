@@ -5,19 +5,7 @@
 
 namespace afw::math {
 
-// Also the wire format: engine structures store three consecutive floats, and
-// afw::process::ReadAt copies straight into this. That is why the type must
-// stay an aggregate with no user-declared constructor, no private members and
-// no virtuals -- methods and operators are free to add, those three are not.
 struct Vec3 {
-  // Public by requirement, not by omission: making them private would end the
-  // aggregate and take ReadAt and every Vec3{.x = ...} with it.
-  // NOLINTBEGIN(misc-non-private-member-variables-in-classes)
-  float x{};
-  float y{};
-  float z{};
-  // NOLINTEND(misc-non-private-member-variables-in-classes)
-
   [[nodiscard]] float Dot(const Vec3& other) const noexcept {
     return (x * other.x) + (y * other.y) + (z * other.z);
   }
@@ -39,10 +27,17 @@ struct Vec3 {
     return Vec3{.x = x / kLength, .y = y / kLength, .z = z / kLength};
   }
 
-  // The tolerance is a parameter rather than a constant so no caller's notion
-  // of "close enough" ends up baked in here.
   [[nodiscard]] bool IsUnitLength(float tolerance) const noexcept {
     return std::fabs(Length() - 1.0F) < tolerance;
+  }
+
+  [[nodiscard]] bool IsFinite() const noexcept {
+    return std::isfinite(x) && std::isfinite(y) && std::isfinite(z);
+  }
+
+  [[nodiscard]] bool IsWithin(float bound) const noexcept {
+    return std::fabs(x) <= bound && std::fabs(y) <= bound &&
+           std::fabs(z) <= bound;
   }
 
   Vec3& operator+=(const Vec3& other) noexcept {
@@ -68,6 +63,9 @@ struct Vec3 {
 
     return *this;
   }
+  float x{};
+  float y{};
+  float z{};
 };
 
 [[nodiscard]] inline Vec3 operator+(Vec3 lhs, const Vec3& rhs) noexcept {

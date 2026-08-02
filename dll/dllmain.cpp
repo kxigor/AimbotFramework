@@ -35,8 +35,6 @@ constexpr DWORD kSettleMilliseconds{100};
 constexpr DWORD kWindowPollMilliseconds{50};
 constexpr int kWindowPollTicks{200};
 
-// Without UNCHANGED_REFCOUNT this would add a reference the unload would then
-// have to undo.
 [[nodiscard]] HMODULE SelfModule() noexcept {
   HMODULE module{nullptr};
   if (GetModuleHandleExW(
@@ -134,10 +132,6 @@ void LogStatus(std::uint64_t frames) {
   Log(message.data());
 }
 
-// Unmapping the DLL while a game thread is still inside one of the detours
-// takes that thread's return address with it. Hooks come off first, so no
-// thread can enter after that, and this is what says the ones already inside
-// have left.
 [[nodiscard]] std::atomic<int>& DetourDepth() noexcept {
   static std::atomic<int> depth{0};
   return depth;
@@ -207,8 +201,6 @@ LRESULT __stdcall WndProcDetour(HWND window, UINT message, WPARAM wParam,
       /*lParam        = */ lParam);
 }
 
-// The menu and the ESP are siblings: render knows neither, so the DLL is what
-// puts both into the one per-frame callback.
 void DrawOverlay() noexcept {
   afw::menu::Draw();
   afw::esp::DrawFrame();
@@ -271,8 +263,6 @@ void WaitForDetours() noexcept {
         /*dwMilliseconds = */ kDrainPollMilliseconds);
   }
 
-  // The count reaching zero is decremented from inside this module, so the
-  // thread that did it has a few instructions left to run here.
   Sleep(
       /*dwMilliseconds = */ kSettleMilliseconds);
 }
@@ -285,8 +275,6 @@ void RunUntilUnload() {
   Log("[aimbot] unload requested\n");
 }
 
-// The window is only known once a frame has been through Present, which is why
-// this is the one hook that cannot be installed up front.
 [[nodiscard]] HWND WaitForOverlayWindow() noexcept {
   for (int tick{0}; tick < kWindowPollTicks; ++tick) {
     HWND window{afw::render::OverlayWindow()};
@@ -336,14 +324,9 @@ void InstallInputHookAndRun() {
 
   RunUntilUnload();
 
-  // Explicit, so the slot is back before the binding that publishes the
-  // original dies. Left to destruction order it is the other way round, and a
-  // detour that finds no original to chain to drops the call on the floor.
   std::ignore = hook->Disable();
 }
 
-// Nested rather than sequential: every hook and binding is scope-bound, and
-// they have to come back off in the reverse order they went on.
 void InstallUpdateHookAndRun() {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
       afw::hook::VmtHook::Create(

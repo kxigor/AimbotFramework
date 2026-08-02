@@ -16,8 +16,6 @@ std::expected<WndProcHook, std::error_code> WndProcHook::Create(
     return std::unexpected{make_error_code(Error::WindowNotFound)};
   }
 
-  // Zero is a legal procedure address, so the failure is told apart from the
-  // value by clearing the thread's last error first.
   SetLastError(/*dwErrCode = */ 0);
   const LONG_PTR kCurrent{GetWindowLongPtrW(
       /*hWnd   = */ window,
