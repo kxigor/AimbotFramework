@@ -7,6 +7,7 @@
 
 add_library(afw_games_fc3 STATIC
   fc3.cpp
+  structs.cpp
   error.cpp
 )
 add_library(afw::games::fc3 ALIAS afw_games_fc3)
@@ -18,7 +19,7 @@ target_include_directories(afw_games_fc3
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(afw_games_fc3 PUBLIC afw::process afw::hook)
+target_link_libraries(afw_games_fc3 PUBLIC afw::process afw::hook afw::math)
 
 if(TARGET project_options)
   target_link_libraries(afw_games_fc3 PRIVATE project_options)

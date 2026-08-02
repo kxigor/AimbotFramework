@@ -53,8 +53,14 @@ Implemented:
   walk over the engine's entity update groups. Every step is a checked read, and
   all addresses are rebased from the Ghidra image base at run time, so ASLR is
   handled in one place.
+- **`afw::math`** — `Vec3` and the algebra on it. It is also the wire format:
+  the engine stores three consecutive floats wherever a point or an axis goes,
+  so `afw::process::ReadAt` copies straight into it and nothing converts
+  anywhere between reading the game's memory and projecting to the screen. That
+  is what keeps it a trivially copyable aggregate — a constructor or a private
+  member would silently change what every read returns.
 - **`afw::config`** — the toggles the menu writes and the ESP reads, so neither
-  owns the other's state. The only platform-agnostic library.
+  owns the other's state.
 - **`afw::menu`** — the overlay's user interface and its message routing:
   `INSERT` shows and hides it, and while it is up the game does not see the
   input it consumes.
@@ -127,10 +133,12 @@ graph TD
   MENU --> CONFIG
   MENU -.-> RENDER
   ESP --> CONFIG
+  ESP --> MATH[afw::math]
   ESP -.-> RENDER
   ESP -.-> FC3
   AIMBOT --> PROCESS[afw::process]
   FC3 --> PROCESS
+  FC3 --> MATH
   FC3 --> HOOK[afw::hook]
   RENDER --> HOOK
   RENDER -.-> WIN
@@ -140,7 +148,8 @@ graph TD
 
 `menu` and `esp` are siblings: neither references the other, and they share
 state only through `config`, so the ESP runs with no user interface present.
-`config` is the one library with no Win32 dependency, so it builds everywhere.
+`config` and `math` are the libraries with no Win32 dependency, so they build
+everywhere � and they are the two whose tests run on any platform.
 
 The types themselves:
 
@@ -197,6 +206,11 @@ classDiagram
     +float x
     +float y
     +float z
+    +Dot(Vec3) float
+    +Cross(Vec3) Vec3
+    +Length() float
+    +Normalised() Vec3
+    +IsUnitLength(float) bool
   }
   class ScreenPoint {
     +float x
@@ -207,22 +221,22 @@ classDiagram
   }
 
   class CameraBasis {
-    +Triple position
-    +Triple forward
-    +Triple upAxis
-    +Triple right
+    +Vec3 position
+    +Vec3 forward
+    +Vec3 upAxis
+    +Vec3 right
     +float fovRadians
     +float fovHorizontalRadians
   }
   class EntityInfo {
     +uintptr address
     +uintptr vtable
-    +Triple position
-    +Triple axisX
-    +Triple axisY
-    +Triple axisZ
-    +Triple aabbMin
-    +Triple aabbMax
+    +Vec3 position
+    +Vec3 axisX
+    +Vec3 axisY
+    +Vec3 axisZ
+    +Vec3 aabbMin
+    +Vec3 aabbMax
     +int32 army
     +bool pawn
     +bool humanoid
@@ -251,6 +265,8 @@ classDiagram
   PresentBinding --> VmtHook : publishes the original of
   UpdateBinding --> VmtHook : publishes the original of
   EntitySnapshot o-- EntityInfo
+  CameraBasis o-- Vec3
+  EntityInfo o-- Vec3
   CameraBasis ..> Matrix4 : builds
   Matrix4 ..> Vec3 : projects
   Vec3 ..> ScreenPoint : becomes
@@ -268,11 +284,12 @@ third_party/
 docs/
   images/               screenshots referenced from this file
 include/afw/            public headers (sibling of src/)
-  win/ remote/ hook/ process/ render/ esp/ menu/ config/ games/fc3/  implemented
+  win/ remote/ hook/ process/ render/ esp/ menu/ config/ math/ games/fc3/
+                                                                   implemented
   aimbot/                                                            skeleton
 src/
   win/ remote/ hook/ process/ render/ esp/ menu/ games/fc3/  STATIC, Windows-only
-  config/                                 STATIC, platform-agnostic
+  config/ math/                           STATIC, platform-agnostic
   aimbot/                                 STATIC, skeleton
 injector/
   injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
@@ -289,7 +306,7 @@ library contains a Windows entry point.
 
 `afw::process` reads this process's memory through the Win32 API, so it and the
 libraries built on it (`games::*`, `aimbot`) are added only under `WIN32`;
-`afw::config` stays platform-agnostic.
+`afw::config` and `afw::math` stay platform-agnostic.
 
 ## Target architecture
 

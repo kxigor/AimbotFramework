@@ -19,7 +19,7 @@ target_include_directories(afw_esp
     $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
 )
 
-target_link_libraries(afw_esp PUBLIC afw::config)
+target_link_libraries(afw_esp PUBLIC afw::config afw::math)
 target_link_libraries(afw_esp PRIVATE afw::render afw::games::fc3 imgui)
 
 if(TARGET project_options)

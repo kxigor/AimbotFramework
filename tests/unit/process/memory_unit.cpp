@@ -1,8 +1,10 @@
 #include <gtest/gtest.h>
 #include <windows.h>
 
+#include <afw/math/vec3.hpp>
 #include <afw/process/error.hpp>
 #include <afw/process/memory.hpp>
+#include <array>
 #include <bit>
 #include <cstdint>
 #include <expected>
@@ -116,4 +118,21 @@ TEST(ProcessMemoryUnit, ReadAtRejectsAReadThatWouldLeaveTheRegion) {
       /*lpAddress  = */ kPage,
       /*dwSize     = */ 0,
       /*dwFreeType = */ MEM_RELEASE);
+}
+
+// The one test that ties afw::math::Vec3 to the engine's memory: it is read
+// straight out of the game with no intermediate type, so three consecutive
+// floats have to come back as x, y and z in that order. If this ever fails, a
+// constructor or a member was added to Vec3 and every read went with it.
+TEST(ProcessMemoryUnit, ReadAtFillsAVec3FromThreeConsecutiveFloats) {
+  const std::array<float, 3> kSource{1.5F, -2.25F, 4.0F};
+
+  const std::expected<afw::math::Vec3, std::error_code> kValue{
+      afw::process::ReadAt<afw::math::Vec3>(
+          std::bit_cast<std::uintptr_t>(kSource.data()))};
+
+  ASSERT_TRUE(kValue.has_value());
+  EXPECT_FLOAT_EQ(kValue->x, 1.5F);
+  EXPECT_FLOAT_EQ(kValue->y, -2.25F);
+  EXPECT_FLOAT_EQ(kValue->z, 4.0F);
 }

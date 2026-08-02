@@ -1,5 +1,6 @@
 #pragma once
 
+#include <afw/math/vec3.hpp>
 #include <array>
 #include <cstddef>
 #include <optional>
@@ -9,11 +10,7 @@ namespace afw::esp {
 constexpr std::size_t kOrder{4};
 constexpr std::size_t kCellCount{kOrder * kOrder};
 
-struct Vec3 {
-  float x{};
-  float y{};
-  float z{};
-};
+using math::Vec3;
 
 struct ScreenPoint {
   float x{};

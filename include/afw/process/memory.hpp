@@ -30,8 +30,11 @@ requires std::is_trivially_copyable_v<T>
     return std::unexpected{make_error_code(Error::NotReadable)};
   }
 
+  // Through void*: the requires clause above already states the precondition
+  // -Wclass-memaccess exists to guess at, and value is value-initialised here,
+  // so there is nothing for the copy to clobber.
   T value{};
-  std::memcpy(&value, source, sizeof(T));
+  std::memcpy(static_cast<void*>(&value), source, sizeof(T));
 
   return value;
 }

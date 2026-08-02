@@ -108,7 +108,7 @@ void LogTable(const afw::hook::Vtable& table) {
 
 void LogStatus(std::uint64_t frames) {
   const afw::games::fc3::Diagnostics kReport{
-      afw::games::fc3::ReadDiagnostics()};
+      afw::games::fc3::Diagnostics::Read()};
   const std::expected<afw::games::fc3::CameraBasis, std::error_code> kCamera{
       afw::games::fc3::ReadCamera()};
 
@@ -124,9 +124,9 @@ void LogStatus(std::uint64_t frames) {
         "[aimbot] frame %llu | view %llX | pos %.1f %.1f %.1f | fov %.4f | "
         "render %dx%d\n",
         frames, static_cast<std::uint64_t>(kReport.cameraView),
-        static_cast<double>(kCamera->position.at(0)),
-        static_cast<double>(kCamera->position.at(1)),
-        static_cast<double>(kCamera->position.at(2)),
+        static_cast<double>(kCamera->position.x),
+        static_cast<double>(kCamera->position.y),
+        static_cast<double>(kCamera->position.z),
         static_cast<double>(kCamera->fovRadians), kReport.viewportWidth,
         kReport.viewportHeight);
   }

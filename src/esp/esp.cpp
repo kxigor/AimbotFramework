@@ -57,26 +57,10 @@ constexpr float kAimTolerance{0.95F};
 constexpr float kPanelWidth{470.0F};
 constexpr float kPanelHeight{820.0F};
 
-[[nodiscard]] Vec3 ToVec3(const games::fc3::Triple& triple) noexcept {
-  return Vec3{.x = triple.at(0), .y = triple.at(1), .z = triple.at(2)};
-}
-
-[[nodiscard]] Vec3 Offset(const Vec3& origin, const Vec3& direction,
-                          float distance) noexcept {
-  return Vec3{.x = origin.x + (direction.x * distance),
-              .y = origin.y + (direction.y * distance),
-              .z = origin.z + (direction.z * distance)};
-}
-
 // The engine derives its vertical half-angle from the horizontal one.
 [[nodiscard]] float VerticalFov(float horizontalRadians,
                                 float aspect) noexcept {
   return kFullAngle * std::atan(std::tan(horizontalRadians * kHalfF) / aspect);
-}
-
-[[nodiscard]] float Length(const Vec3& value) noexcept {
-  return std::sqrt((value.x * value.x) + (value.y * value.y) +
-                   (value.z * value.z));
 }
 
 void ShowAddress(const char* label, std::uintptr_t value) {
@@ -90,7 +74,7 @@ void ShowAddress(const char* label, std::uintptr_t value) {
 void ShowAxis(const char* label, const Vec3& axis) {
   ImGui::Text("%-18s %8.3f %8.3f %8.3f  |%.3f|", label,
               static_cast<double>(axis.x), static_cast<double>(axis.y),
-              static_cast<double>(axis.z), static_cast<double>(Length(axis)));
+              static_cast<double>(axis.z), static_cast<double>(axis.Length()));
 }
 
 void ShowPoint(const char* label, const std::optional<ScreenPoint>& point) {
@@ -146,9 +130,9 @@ void ShowAngle(const char* label, float radians) {
 
 void ShowCamera(const games::fc3::CameraBasis& camera, const Vec3& right,
                 float aspect, float verticalFov) {
-  ShowAxis("position", ToVec3(camera.position));
-  ShowAxis("forward", ToVec3(camera.forward));
-  ShowAxis("up", ToVec3(camera.upAxis));
+  ShowAxis("position", camera.position);
+  ShowAxis("forward", camera.forward);
+  ShowAxis("up", camera.upAxis);
   ShowAxis("right", right);
   ShowAngle("fov h (engine)", camera.fovHorizontalRadians);
   ShowAngle("fov v (derived)", verticalFov);
@@ -166,13 +150,8 @@ void ShowMarkers(const ImVec2& display, const std::optional<ScreenPoint>& ahead,
   ShowPoint("right 2m at 10m", probe);
 }
 
-[[nodiscard]] float DistanceTo(const Vec3& eye,
-                               const games::fc3::Triple& point) noexcept {
-  const Vec3 kDelta{.x = point.at(0) - eye.x,
-                    .y = point.at(1) - eye.y,
-                    .z = point.at(2) - eye.z};
-
-  return Length(kDelta);
+[[nodiscard]] float DistanceTo(const Vec3& eye, const Vec3& point) noexcept {
+  return (point - eye).Length();
 }
 
 struct ScreenRect {
@@ -186,13 +165,8 @@ struct ScreenRect {
 // in position.
 [[nodiscard]] Vec3 ToWorld(const games::fc3::EntityInfo& entity,
                            const Vec3& local) noexcept {
-  return Vec3{
-      .x = entity.position.at(0) + (entity.axisX.at(0) * local.x) +
-           (entity.axisY.at(0) * local.y) + (entity.axisZ.at(0) * local.z),
-      .y = entity.position.at(1) + (entity.axisX.at(1) * local.x) +
-           (entity.axisY.at(1) * local.y) + (entity.axisZ.at(1) * local.z),
-      .z = entity.position.at(2) + (entity.axisX.at(2) * local.x) +
-           (entity.axisY.at(2) * local.y) + (entity.axisZ.at(2) * local.z)};
+  return entity.position + (entity.axisX * local.x) + (entity.axisY * local.y) +
+         (entity.axisZ * local.z);
 }
 
 // The screen bounding rectangle of the box's eight corners, so the yaw and the
@@ -206,12 +180,10 @@ struct ScreenRect {
                   .bottom = std::numeric_limits<float>::lowest()};
 
   for (std::size_t corner{0}; corner < kBoxCorners; ++corner) {
-    const Vec3 kLocal{.x = ((corner & 1U) != 0U) ? entity.aabbMax.at(0)
-                                                 : entity.aabbMin.at(0),
-                      .y = ((corner & 2U) != 0U) ? entity.aabbMax.at(1)
-                                                 : entity.aabbMin.at(1),
-                      .z = ((corner & 4U) != 0U) ? entity.aabbMax.at(2)
-                                                 : entity.aabbMin.at(2)};
+    const Vec3 kLocal{
+        .x = ((corner & 1U) != 0U) ? entity.aabbMax.x : entity.aabbMin.x,
+        .y = ((corner & 2U) != 0U) ? entity.aabbMax.y : entity.aabbMin.y,
+        .z = ((corner & 4U) != 0U) ? entity.aabbMax.z : entity.aabbMin.z};
 
     const std::optional<ScreenPoint> kPoint{WorldToScreen(
         projection, ToWorld(entity, kLocal), display.x, display.y)};
@@ -278,11 +250,7 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
     }
 
     const std::optional<ScreenPoint> kPoint{
-        WorldToScreen(projection,
-                      Vec3{.x = kEntity.position.at(0),
-                           .y = kEntity.position.at(1),
-                           .z = kEntity.position.at(2)},
-                      display.x, display.y)};
+        WorldToScreen(projection, kEntity.position, display.x, display.y)};
     if (kPoint) {
       ImGui::GetBackgroundDrawList()->AddCircleFilled(
           ImVec2{kPoint->x, kPoint->y}, kPropRadius, kPropColour);
@@ -290,20 +258,9 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
   }
 }
 
-[[nodiscard]] Vec3 Normalise(const Vec3& value) noexcept {
-  const float kLength{Length(value)};
-  if (kLength <= 0.0F) {
-    return Vec3{};
-  }
-
-  return Vec3{
-      .x = value.x / kLength, .y = value.y / kLength, .z = value.z / kLength};
-}
-
-void ShowTriple(const char* label, const games::fc3::Triple& value) {
-  ImGui::Text(
-      "%-14s %9.3f %9.3f %9.3f", label, static_cast<double>(value.at(0)),
-      static_cast<double>(value.at(1)), static_cast<double>(value.at(2)));
+void ShowVector(const char* label, const Vec3& value) {
+  ImGui::Text("%-14s %9.3f %9.3f %9.3f", label, static_cast<double>(value.x),
+              static_cast<double>(value.y), static_cast<double>(value.z));
 }
 
 // Whatever sits nearest the crosshair, dumped raw.
@@ -316,17 +273,14 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    const Vec3 kDelta{.x = kEntity.position.at(0) - eye.x,
-                      .y = kEntity.position.at(1) - eye.y,
-                      .z = kEntity.position.at(2) - eye.z};
-    const float kDistance{Length(kDelta)};
+    const Vec3 kDelta{kEntity.position - eye};
+    const float kDistance{kDelta.Length()};
     if (kDistance < 1.0F || kDistance > kDrawDistance) {
       continue;
     }
 
-    const Vec3 kDirection{Normalise(kDelta)};
-    const float kDot{(kDirection.x * forward.x) + (kDirection.y * forward.y) +
-                     (kDirection.z * forward.z)};
+    const Vec3 kDirection{kDelta.Normalised()};
+    const float kDot{kDirection.Dot(forward)};
     if (kDot > best) {
       best = kDot;
       nearest = &kEntity;
@@ -345,9 +299,9 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
   ImGui::Text("%-14s %llX", "vtable",
               static_cast<std::uint64_t>(nearest->vtable));
   ImGui::Text("%-14s %.1f m", "distance", static_cast<double>(bestDistance));
-  ShowTriple("position", nearest->position);
-  ShowTriple("aabb min", nearest->aabbMin);
-  ShowTriple("aabb max", nearest->aabbMax);
+  ShowVector("position", nearest->position);
+  ShowVector("aabb min", nearest->aabbMin);
+  ShowVector("aabb max", nearest->aabbMax);
   ImGui::Text("%-14s %d  faction %d  dead %u  pawn %d", "army", nearest->army,
               nearest->faction, nearest->deadByte,
               static_cast<int>(nearest->pawn));
@@ -449,11 +403,10 @@ struct Markers {
                                      const Vec3& forward, const Vec3& right,
                                      const ImVec2& display) noexcept {
   return Markers{
-      .ahead = WorldToScreen(projection, Offset(eye, forward, kAheadDistance),
+      .ahead = WorldToScreen(projection, eye + (forward * kAheadDistance),
                              display.x, display.y),
       .probe = WorldToScreen(
-          projection,
-          Offset(Offset(eye, forward, kProbeDistance), right, kProbeOffset),
+          projection, eye + (forward * kProbeDistance) + (right * kProbeOffset),
           display.x, display.y)};
 }
 
@@ -478,7 +431,7 @@ void DrawFrame() noexcept {
   ImGui::SetNextWindowSize(ImVec2{kPanelWidth, kPanelHeight},
                            ImGuiCond_FirstUseEver);
   ImGui::Begin("ESP");
-  ShowChain(games::fc3::ReadDiagnostics(), kDisplay);
+  ShowChain(games::fc3::Diagnostics::Read(), kDisplay);
   ImGui::SeparatorText("camera");
 
   const std::expected<games::fc3::CameraBasis, std::error_code> kCamera{
@@ -494,15 +447,15 @@ void DrawFrame() noexcept {
     return;
   }
 
-  const Vec3 kEye{ToVec3(kCamera->position)};
-  const Vec3 kForward{ToVec3(kCamera->forward)};
-  const Vec3 kRight{ToVec3(kCamera->right)};
+  const Vec3 kEye{kCamera->position};
+  const Vec3 kForward{kCamera->forward};
+  const Vec3 kRight{kCamera->right};
   const float kAspect{kDisplay.x / kDisplay.y};
   const float kVerticalFov{VerticalFov(kCamera->fovHorizontalRadians, kAspect)};
   ShowCamera(*kCamera, kRight, kAspect, kVerticalFov);
 
   const Matrix4 kViewProjection{
-      Multiply(BuildView(kEye, kForward, ToVec3(kCamera->upAxis), kRight),
+      Multiply(BuildView(kEye, kForward, kCamera->upAxis, kRight),
                BuildProjection(kVerticalFov, kAspect, kNearPlane, kFarPlane))};
 
   const Markers kMarkers{

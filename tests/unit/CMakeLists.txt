@@ -1,5 +1,6 @@
 add_subdirectory(basic)
 add_subdirectory(config)
+add_subdirectory(math)
 
 if(WIN32)
   add_subdirectory(win)

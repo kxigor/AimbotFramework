@@ -23,6 +23,7 @@
 # still empty skeletons; afw::remote is implemented and Windows-only.
 
 add_subdirectory(config)
+add_subdirectory(math)
 
 # Windows-only libraries; skip on non-Windows so afw::core still configures for
 # a Linux/macOS consumer. Ordered by dependency: win before remote and hook,
