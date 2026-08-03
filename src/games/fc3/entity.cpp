@@ -470,18 +470,7 @@ std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept {
     return std::nullopt;
   }
 
-  std::optional<PawnInfo> pawn{ReadAgent(*kAgent, *kKind)};
-  if (!pawn) {
-    return std::nullopt;
-  }
-
-  if (IsPawnClass(address)) {
-    pawn->deadByte =
-        process::ReadAt<std::uint8_t>(address + kPawnIsDead).value_or(0);
-    pawn->dead = pawn->deadByte != 0;
-  }
-
-  return pawn;
+  return ReadAgent(*kAgent, *kKind);
 }
 
 }  // namespace afw::games::fc3

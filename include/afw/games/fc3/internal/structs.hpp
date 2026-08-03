@@ -81,8 +81,6 @@ struct PawnInfo {
   std::uint8_t ownArmyBit{};
   std::uint8_t hostileMask{};
   std::uint8_t reverseHostileMask{};
-  std::uint8_t deadByte{};
-  bool dead{};
 };
 
 // Archetype identity. The vtable cannot stand in for it: a car and a pirate

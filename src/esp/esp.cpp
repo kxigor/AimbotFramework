@@ -300,12 +300,7 @@ enum class Kind : std::uint8_t {
   return Kind::Prop;
 }
 
-[[nodiscard]] ImU32 ColourOf(const games::fc3::EntityInfo& entity,
-                             Kind kind) noexcept {
-  if (entity.pawn && entity.pawn->dead) {
-    return kDeadColour;
-  }
-
+[[nodiscard]] ImU32 ColourOf(Kind kind) noexcept {
   switch (kind) {
     case Kind::Self:
     case Kind::Enemy:
@@ -387,7 +382,7 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
       continue;
     }
 
-    const ImU32 kColour{ColourOf(kEntity, kKind)};
+    const ImU32 kColour{ColourOf(kKind)};
 
     if (kKind == Kind::Animal) {
       DrawRing(kEntity, projection, display, kColour);
@@ -423,7 +418,9 @@ struct AimHit {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
   AimHit hit{};
+  AimHit spare{};
   float best{kAimTolerance};
+  float fallback{kAimTolerance};
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
@@ -435,13 +432,20 @@ struct AimHit {
 
     const Vec3 kDirection{kDelta.Normalised()};
     const float kDot{kDirection.Dot(forward)};
-    if (kDot > best) {
-      best = kDot;
-      hit = AimHit{.entity = &kEntity, .distance = kDistance};
+    if (kEntity.pawn) {
+      if (kDot > best) {
+        best = kDot;
+        hit = AimHit{.entity = &kEntity, .distance = kDistance};
+      }
+      continue;
+    }
+    if (hit.entity == nullptr && kDot > fallback) {
+      fallback = kDot;
+      spare = AimHit{.entity = &kEntity, .distance = kDistance};
     }
   }
 
-  return hit;
+  return hit.entity != nullptr ? hit : spare;
 }
 
 struct NearbyRow {
@@ -546,9 +550,8 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
     return;
   }
   const games::fc3::PawnInfo& kPawn{*kNearest->pawn};
-  ImGui::Text("%-14s %d  faction %d  dead %u", "army", kPawn.army,
-              kPawn.faction, kPawn.deadByte);
-  ImGui::Text("%-14s %08X", "agent type", kPawn.agentType);
+  ImGui::Text("%-14s %d  faction %d", "army", kPawn.army, kPawn.faction);
+  ImGui::Text("%-14s %u", "agent type", kPawn.agentType);
   ImGui::Text("%-14s own %02X  hostile %02X  reverse %02X", "masks",
               kPawn.ownArmyBit, kPawn.hostileMask, kPawn.reverseHostileMask);
 }
