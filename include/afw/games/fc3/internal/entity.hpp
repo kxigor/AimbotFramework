@@ -48,6 +48,13 @@ struct RawEntity {
 // component that carries an agent pointer -- which is what the fixtures build,
 // and the only way any of this is testable without the engine.
 
+// A fallback, not the first choice. Several components of one entity carry a
+// rigid basis at kComponentWorldMatrix and they do not agree: measured across
+// 33 characters, taking the first rigid one put a single pirate 118 m from
+// where he stood, which is why his box never appeared on him. The entity's own
+// matrix agreed with the truth in all 33 cases, so this only runs when that one
+// is not rigid.
+
 // Walks a component back to its entity. What comes back is confirmed to be an
 // entity before it is handed out.
 [[nodiscard]] std::optional<std::uintptr_t> OwnerOfComponent(

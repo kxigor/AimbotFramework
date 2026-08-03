@@ -140,13 +140,19 @@ struct ClassCacheState {
 
 [[nodiscard]] std::expected<Matrix4, std::error_code> ReadWorldMatrix(
     std::uintptr_t address) noexcept {
+  const std::expected<Matrix4, std::error_code> kOwn{
+      process::ReadAt<Matrix4>(address + kEntityTransform)};
+  if (kOwn && kOwn->IsRigid(kUnitTolerance, kAxisTolerance)) {
+    return *kOwn;
+  }
+
   const std::optional<Matrix4> kFromComponent{
       ReadComponentWorldMatrix(address)};
   if (kFromComponent) {
     return *kFromComponent;
   }
 
-  return process::ReadAt<Matrix4>(address + kEntityTransform);
+  return kOwn;
 }
 
 [[nodiscard]] bool IsPlausibleArmy(std::int32_t army) noexcept {
