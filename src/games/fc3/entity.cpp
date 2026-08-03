@@ -217,13 +217,26 @@ struct ClassCacheState {
   return std::nullopt;
 }
 
+[[nodiscard]] bool WouldBuildHashTable(std::uintptr_t address) noexcept {
+  const std::expected<std::uint32_t, std::error_code> kFlags{
+      process::ReadAt<std::uint32_t>(address + kEntityFlags)};
+  if (!kFlags || (*kFlags & kEntityHashTableFlag) == 0) {
+    return false;
+  }
+
+  const std::expected<std::uintptr_t, std::error_code> kTable{
+      process::ReadPointerAs<EnginePtr>(address + kEntityHashTable)};
+
+  return !kTable || *kTable == 0;
+}
+
 [[nodiscard]] std::optional<std::uintptr_t> FindAgent(
     std::uintptr_t address) noexcept {
   const std::uintptr_t kAccessor{Resolve(kGetAiComponent)};
   if (kAccessor == 0) {
     return AgentFromComponents(address);
   }
-  if (!IsEntityClass(address)) {
+  if (!IsEntityClass(address) || WouldBuildHashTable(address)) {
     return std::nullopt;
   }
 
@@ -261,6 +274,33 @@ struct ClassCacheState {
   return std::nullopt;
 }
 
+void ReadPawnAgentFields(std::uintptr_t agent, PawnInfo& pawn) noexcept {
+  const std::expected<std::int32_t, std::error_code> kArmy{
+      process::ReadAt<std::int32_t>(agent + kAgentArmy)};
+  const std::expected<std::int32_t, std::error_code> kFaction{
+      process::ReadAt<std::int32_t>(agent + kAgentFaction)};
+  const std::expected<std::uint32_t, std::error_code> kType{
+      process::ReadAt<std::uint32_t>(agent + kAgentType)};
+  if (kArmy && IsPlausibleArmy(*kArmy)) {
+    pawn.army = *kArmy;
+  }
+  if (kFaction && IsPlausibleFaction(*kFaction)) {
+    pawn.faction = *kFaction;
+  }
+  if (kType && IsPlausibleAgentType(*kType)) {
+    pawn.agentType = *kType;
+  }
+  if (pawn.agentType == kAgentCompanion) {
+    return;
+  }
+
+  const std::uint8_t kFlag{
+      process::ReadAt<std::uint8_t>(agent + kAgentIsDead).value_or(0)};
+  const std::int32_t kState{
+      process::ReadAt<std::int32_t>(agent + kAgentArmyMemberState).value_or(0)};
+  pawn.dead = kFlag != 0 || kState == kArmyMemberStateDead;
+}
+
 [[nodiscard]] std::optional<PawnInfo> ReadAgent(std::uintptr_t agent,
                                                 AgentKind kind) noexcept {
   if (kind == AgentKind::SimpleAnimal) {
@@ -285,25 +325,16 @@ struct ClassCacheState {
       process::ReadAt<std::uint8_t>(kBlock + kArmyBlockReverseHostile)
           .value_or(0);
 
+  if (kind == AgentKind::Animal) {
+    pawn.dead =
+        process::ReadAt<std::uint8_t>(agent + kAnimalAgentIsDead).value_or(0) !=
+        0;
+  }
   if (kind != AgentKind::Pawn) {
     return pawn;
   }
 
-  const std::expected<std::int32_t, std::error_code> kArmy{
-      process::ReadAt<std::int32_t>(agent + kAgentArmy)};
-  const std::expected<std::int32_t, std::error_code> kFaction{
-      process::ReadAt<std::int32_t>(agent + kAgentFaction)};
-  const std::expected<std::uint32_t, std::error_code> kType{
-      process::ReadAt<std::uint32_t>(agent + kAgentType)};
-  if (kArmy && IsPlausibleArmy(*kArmy)) {
-    pawn.army = *kArmy;
-  }
-  if (kFaction && IsPlausibleFaction(*kFaction)) {
-    pawn.faction = *kFaction;
-  }
-  if (kType && IsPlausibleAgentType(*kType)) {
-    pawn.agentType = *kType;
-  }
+  ReadPawnAgentFields(agent, pawn);
 
   return pawn;
 }

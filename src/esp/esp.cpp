@@ -49,6 +49,7 @@ constexpr std::array<const char*, games::fc3::kRejectionCount> kRejectionNames{
 
 constexpr ImU32 kCivilianColour{0xFFA0FFA0};
 constexpr ImU32 kAnimalColour{0xFF7070A0};
+constexpr ImU32 kBirdColour{0xFFC0C070};
 constexpr ImU32 kPredatorColour{0xFF2060FF};
 constexpr ImU32 kVehicleColour{0xFF40C0FF};
 
@@ -61,6 +62,7 @@ constexpr std::size_t kLabelChars{64};
 constexpr std::size_t kVtableSlots{12};
 constexpr float kAimTolerance{0.95F};
 constexpr std::size_t kNearbyRows{8};
+constexpr int kTriangleSides{3};
 constexpr float kNearbyRange{25.0F};
 constexpr std::int32_t kNoPawnField{-99};
 constexpr float kPanelWidth{540.0F};
@@ -240,6 +242,7 @@ enum class Kind : std::uint8_t {
   Civilian,
   Predator,
   Animal,
+  Bird,
   Vehicle,
   Prop
 };
@@ -268,7 +271,7 @@ enum class Kind : std::uint8_t {
     return Kind::Vehicle;
   }
   if (pawn.kind == games::fc3::AgentKind::SimpleAnimal) {
-    return Kind::Animal;
+    return Kind::Bird;
   }
   if (pawn.kind == games::fc3::AgentKind::Animal) {
     return (self != nullptr && ArmiesHostile(*self, pawn)) ? Kind::Predator
@@ -303,7 +306,12 @@ enum class Kind : std::uint8_t {
   return Kind::Prop;
 }
 
-[[nodiscard]] ImU32 ColourOf(Kind kind) noexcept {
+[[nodiscard]] ImU32 ColourOf(const games::fc3::EntityInfo& entity,
+                             Kind kind) noexcept {
+  if (entity.pawn && entity.pawn->dead) {
+    return kDeadColour;
+  }
+
   switch (kind) {
     case Kind::Self:
     case Kind::Enemy:
@@ -316,6 +324,8 @@ enum class Kind : std::uint8_t {
       return kPredatorColour;
     case Kind::Animal:
       return kAnimalColour;
+    case Kind::Bird:
+      return kBirdColour;
     case Kind::Vehicle:
       return kVehicleColour;
     case Kind::Prop:
@@ -369,6 +379,22 @@ void DrawRing(const games::fc3::EntityInfo& entity, const Matrix4& projection,
   DrawLabel(entity, *kRect, colour);
 }
 
+void DrawTriangle(const games::fc3::EntityInfo& entity,
+                  const Matrix4& projection, const ImVec2& display,
+                  ImU32 colour) {
+  const std::optional<ScreenRect> kRect{
+      ProjectBox(entity, projection, display)};
+  if (!kRect) {
+    return;
+  }
+
+  const ImVec2 kCentre{(kRect->left + kRect->right) * kHalfF,
+                       (kRect->top + kRect->bottom) * kHalfF};
+  ImGui::GetBackgroundDrawList()->AddNgon(
+      kCentre, (kRect->bottom - kRect->top) * kHalfF, colour, kTriangleSides,
+      kBoxThickness);
+}
+
 void DrawEntities(const Vec3& eye, const Matrix4& projection,
                   const ImVec2& display) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
@@ -385,9 +411,13 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
       continue;
     }
 
-    const ImU32 kColour{ColourOf(kKind)};
+    const ImU32 kColour{ColourOf(kEntity, kKind)};
 
-    if (kKind == Kind::Animal) {
+    if (kKind == Kind::Bird) {
+      DrawTriangle(kEntity, projection, display, kColour);
+      continue;
+    }
+    if (kKind == Kind::Animal || kKind == Kind::Predator) {
       DrawRing(kEntity, projection, display, kColour);
       continue;
     }
@@ -488,6 +518,8 @@ void Insert(NearbyRows& rows, std::size_t& used,
       return "predator";
     case Kind::Animal:
       return "animal";
+    case Kind::Bird:
+      return "bird";
     case Kind::Vehicle:
       return "vehicle";
     case Kind::Prop:

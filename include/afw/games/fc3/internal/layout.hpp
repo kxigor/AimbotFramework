@@ -129,6 +129,15 @@ constexpr std::uintptr_t kPawnIsDead{0x258};
 constexpr std::uintptr_t kComponentAgent{0x14};
 constexpr std::uintptr_t kGetAiComponent{0x101C7E37};
 
+// GetComponentBySlot searches linearly unless this flag is set, and then it
+// builds a hash table and caches it in the entity the first time it is asked --
+// an allocation through the game's own CRT, made from our thread, for every
+// entity we look at. Observing the world must not change it, so the accessor is
+// only called when the answer is already there to be found.
+constexpr std::uintptr_t kEntityFlags{0x60};
+constexpr std::uintptr_t kEntityHashTable{0x64};
+constexpr std::uint32_t kEntityHashTableFlag{0x200000};
+
 // The army block is one four-byte struct -- own bit, hostile mask, alliance
 // mask, reverse-hostile mask -- and the engine passes a pawn's and an animal's
 // to the same predicate. CPawnAgent keeps it at +0x280, CAnimalAgentFC3 at
@@ -137,6 +146,16 @@ constexpr std::uintptr_t kPawnAgentArmyBlock{0x280};
 constexpr std::uintptr_t kAnimalAgentArmyBlock{0x4FE};
 constexpr std::uintptr_t kArmyBlockHostile{1};
 constexpr std::uintptr_t kArmyBlockReverseHostile{3};
+
+// CPawnAgent::IsDead, vtable slot 0xC0 at 0x10bd5c65, is a pure data read once
+// the agent is not a Companion: the byte at +0x258 or an army-member state
+// of 7. A Companion delegates to the buddy subsystem, so death is not
+// established for one. CAnimalAgentFC3::IsDead at 0x10b7789d is a single byte
+// at +0x1d0c.
+constexpr std::uintptr_t kAgentIsDead{0x258};
+constexpr std::uintptr_t kAgentArmyMemberState{0x2B0};
+constexpr std::int32_t kArmyMemberStateDead{7};
+constexpr std::uintptr_t kAnimalAgentIsDead{0x1D0C};
 
 constexpr std::uintptr_t kAgentArmy{0x284};
 constexpr std::uintptr_t kAgentFaction{0x290};
