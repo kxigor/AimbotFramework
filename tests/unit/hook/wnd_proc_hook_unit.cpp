@@ -5,6 +5,7 @@
 #include <afw/hook/wnd_proc_hook.hpp>
 #include <bit>
 #include <expected>
+#include <memory>
 #include <system_error>
 
 namespace {
@@ -77,7 +78,28 @@ TEST(WndProcHookUnit, CapturesTheOriginalBeforeAnyDetourIsNamed) {
       afw::hook::WndProcHook::Create(kWindow.Get())};
 
   ASSERT_TRUE(kHook.has_value());
-  EXPECT_EQ(kHook->Original(), CurrentProc(kWindow.Get()));
+  EXPECT_EQ(kHook->Original<WNDPROC>(), CurrentProc(kWindow.Get()));
+}
+
+TEST(WndProcHookUnit, CreateDynamicCapturesTheSameOriginalOnTheHeap) {
+  const ProbeWindow kWindow{};
+  ASSERT_NE(kWindow.Get(), nullptr);
+
+  const std::expected<std::unique_ptr<afw::hook::WndProcHook>, std::error_code>
+      kHook{afw::hook::WndProcHook::CreateDynamic(kWindow.Get())};
+
+  ASSERT_TRUE(kHook.has_value());
+  ASSERT_NE(kHook->get(), nullptr);
+  EXPECT_EQ((*kHook)->Original<WNDPROC>(), CurrentProc(kWindow.Get()));
+}
+
+TEST(WndProcHookUnit, CreateDynamicRefusesANonWindowTheSameWay) {
+  const std::expected<std::unique_ptr<afw::hook::WndProcHook>, std::error_code>
+      kHook{afw::hook::WndProcHook::CreateDynamic(nullptr)};
+
+  ASSERT_FALSE(kHook.has_value());
+  EXPECT_EQ(kHook.error(),
+            afw::hook::make_error_code(afw::hook::Error::WindowNotFound));
 }
 
 TEST(WndProcHookUnit, RefusesToEnableWithoutADetour) {

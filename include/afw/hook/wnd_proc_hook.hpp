@@ -2,19 +2,25 @@
 
 #include <windows.h>
 
+#include <afw/hook/hook.hpp>
 #include <expected>
+#include <memory>
 #include <system_error>
 
 namespace afw::hook {
 
-class WndProcHook {
+class WndProcHook final : public Hook {
   struct AdoptTag {};
 
  public:
   [[nodiscard]] static std::expected<WndProcHook, std::error_code> Create(
       HWND window) noexcept;
 
-  WndProcHook(AdoptTag tag, HWND window, WNDPROC original) noexcept;
+  [[nodiscard]] static std::expected<std::unique_ptr<WndProcHook>,
+                                     std::error_code>
+  CreateDynamic(HWND window) noexcept;
+
+  WndProcHook(AdoptTag tag, HWND window, void* original) noexcept;
 
   WndProcHook(const WndProcHook&) = delete;
   WndProcHook& operator=(const WndProcHook&) = delete;
@@ -22,24 +28,24 @@ class WndProcHook {
   WndProcHook(WndProcHook&&) = delete;
   WndProcHook& operator=(WndProcHook&&) = delete;
 
-  ~WndProcHook();
+  ~WndProcHook() override;
 
-  [[nodiscard]] std::expected<void, std::error_code> SetDetour(
-      WNDPROC detour) noexcept;
-
-  [[nodiscard]] WNDPROC Original() const noexcept;
-
-  [[nodiscard]] std::expected<void, std::error_code> Enable() noexcept;
-  [[nodiscard]] std::expected<void, std::error_code> Disable() noexcept;
+  [[nodiscard]] std::expected<void, std::error_code> Enable() noexcept override;
+  [[nodiscard]] std::expected<void, std::error_code> Disable() noexcept
+      override;
 
  private:
-  [[nodiscard]] std::expected<void, std::error_code> Swap(
-      WNDPROC value) noexcept;
+  [[nodiscard]] std::expected<void, std::error_code> SetDetourRaw(
+      void* detour) noexcept override;
+
+  [[nodiscard]] void* OriginalRaw() const noexcept override;
+
+  [[nodiscard]] std::expected<void, std::error_code> Swap(void* value) noexcept;
 
   bool isEnabled_{false};
-  WNDPROC detour_{nullptr};
+  void* detour_{nullptr};
   HWND window_{nullptr};
-  WNDPROC original_{nullptr};
+  void* original_{nullptr};
 };
 
 }  // namespace afw::hook

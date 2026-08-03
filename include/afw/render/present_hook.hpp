@@ -2,7 +2,7 @@
 
 #include <windows.h>
 
-#include <afw/hook/vmt_hook.hpp>
+#include <afw/hook/hook.hpp>
 
 struct IDXGISwapChain;
 
@@ -12,7 +12,7 @@ using PresentFn = HRESULT(__stdcall*)(IDXGISwapChain*, UINT, UINT);
 
 class PresentBinding {
  public:
-  explicit PresentBinding(const hook::VmtHook& hook) noexcept;
+  explicit PresentBinding(const hook::Hook& hook) noexcept;
 
   PresentBinding(const PresentBinding&) = delete;
   PresentBinding& operator=(const PresentBinding&) = delete;

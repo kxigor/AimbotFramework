@@ -2,7 +2,7 @@
 
 #include <afw/abi/abi.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
-#include <afw/hook/vmt_hook.hpp>
+#include <afw/hook/hook.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -46,7 +46,7 @@ void PublishCensus() noexcept;
 
 class UpdateBinding {
  public:
-  explicit UpdateBinding(const hook::VmtHook& hook) noexcept;
+  explicit UpdateBinding(const hook::Hook& hook) noexcept;
 
   UpdateBinding(const UpdateBinding&) = delete;
   UpdateBinding& operator=(const UpdateBinding&) = delete;

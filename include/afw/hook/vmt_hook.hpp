@@ -1,25 +1,23 @@
 #pragma once
 
+#include <afw/hook/hook.hpp>
 #include <afw/hook/vtable.hpp>
-#include <bit>
 #include <cstddef>
 #include <expected>
+#include <memory>
 #include <system_error>
-#include <type_traits>
 
 namespace afw::hook {
 
-template <typename Fn>
-concept SlotFunction =
-    std::is_pointer_v<Fn> && std::is_function_v<std::remove_pointer_t<Fn>> &&
-    sizeof(Fn) == sizeof(void*);
-
-class VmtHook {
+class VmtHook final : public Hook {
   struct AdoptTag {};
 
  public:
   [[nodiscard]] static std::expected<VmtHook, std::error_code> Create(
       Vtable table, std::size_t index) noexcept;
+
+  [[nodiscard]] static std::expected<std::unique_ptr<VmtHook>, std::error_code>
+  CreateDynamic(Vtable table, std::size_t index) noexcept;
 
   VmtHook(AdoptTag tag, void** slot, void* original) noexcept;
 
@@ -29,25 +27,17 @@ class VmtHook {
   VmtHook(VmtHook&&) = delete;
   VmtHook& operator=(VmtHook&&) = delete;
 
-  ~VmtHook();
+  ~VmtHook() override;
 
-  template <SlotFunction Fn>
-  [[nodiscard]] std::expected<void, std::error_code> SetDetour(
-      Fn detour) noexcept {
-    return SetDetourRaw(std::bit_cast<void*>(detour));
-  }
-
-  template <SlotFunction Fn>
-  [[nodiscard]] Fn Original() const noexcept {
-    return std::bit_cast<Fn>(kOriginal_);
-  }
-
-  [[nodiscard]] std::expected<void, std::error_code> Enable() noexcept;
-  [[nodiscard]] std::expected<void, std::error_code> Disable() noexcept;
+  [[nodiscard]] std::expected<void, std::error_code> Enable() noexcept override;
+  [[nodiscard]] std::expected<void, std::error_code> Disable() noexcept
+      override;
 
  private:
   [[nodiscard]] std::expected<void, std::error_code> SetDetourRaw(
-      void* detour) noexcept;
+      void* detour) noexcept override;
+
+  [[nodiscard]] void* OriginalRaw() const noexcept override;
 
   [[nodiscard]] std::expected<void, std::error_code> SwapSlot(
       void* value) noexcept;

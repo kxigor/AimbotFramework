@@ -10,6 +10,7 @@ endif()
 
 add_library(aimbot SHARED
   dllmain.cpp
+  farcry3.cpp
 )
 
 set_target_properties(aimbot PROPERTIES
@@ -20,11 +21,9 @@ set_target_properties(aimbot PROPERTIES
 target_link_libraries(aimbot
   PRIVATE
     afw::aimbot
+    afw::app          # the session: overlay, input, unload; pulls in afw::hook
     afw::games::fc3   # pulls in afw::process transitively
     afw::esp          # world-to-screen boxes drawn from the frame callback
-    afw::menu         # the overlay's user interface, esp's sibling
-    afw::config       # the toggles both of them read
-    afw::render       # the Present hook; pulls in afw::hook transitively
     afw::win          # RAII wrappers (ScopedHandle) used in DllMain
 )
 

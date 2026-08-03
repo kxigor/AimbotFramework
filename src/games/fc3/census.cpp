@@ -62,8 +62,8 @@ EntityCensus& Published() noexcept {
   return census;
 }
 
-const hook::VmtHook*& BoundUpdate() noexcept {
-  static const hook::VmtHook* hook{nullptr};
+const hook::Hook*& BoundUpdate() noexcept {
+  static const hook::Hook* hook{nullptr};
   return hook;
 }
 
@@ -201,14 +201,14 @@ EntityCensus LastCensus() noexcept { return Published(); }
 
 const EntitySnapshot& LastSnapshot() noexcept { return PublishedSnapshot(); }
 
-UpdateBinding::UpdateBinding(const hook::VmtHook& hook) noexcept {
+UpdateBinding::UpdateBinding(const hook::Hook& hook) noexcept {
   BoundUpdate() = &hook;
 }
 
 UpdateBinding::~UpdateBinding() { BoundUpdate() = nullptr; }
 
 RunAllGroupFn OriginalRunAllGroup() noexcept {
-  const hook::VmtHook* const kHook{BoundUpdate()};
+  const hook::Hook* const kHook{BoundUpdate()};
   if (kHook == nullptr) {
     return nullptr;
   }

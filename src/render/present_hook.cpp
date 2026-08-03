@@ -4,21 +4,21 @@ namespace afw::render {
 
 namespace {
 
-const hook::VmtHook*& BoundHook() noexcept {
-  static const hook::VmtHook* hook{nullptr};
+const hook::Hook*& BoundHook() noexcept {
+  static const hook::Hook* hook{nullptr};
   return hook;
 }
 
 }  // namespace
 
-PresentBinding::PresentBinding(const hook::VmtHook& hook) noexcept {
+PresentBinding::PresentBinding(const hook::Hook& hook) noexcept {
   BoundHook() = &hook;
 }
 
 PresentBinding::~PresentBinding() { BoundHook() = nullptr; }
 
 PresentFn OriginalPresent() noexcept {
-  const hook::VmtHook* const kHook{BoundHook()};
+  const hook::Hook* const kHook{BoundHook()};
   if (kHook == nullptr) {
     return nullptr;
   }

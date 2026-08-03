@@ -37,7 +37,13 @@ Implemented:
   out the address of a slot; `VmtHook` swaps one such slot and `WndProcHook`
   swaps a window procedure through `SetWindowLongPtrW`. Both put the original
   back on destruction, and both capture it at construction, so a detour that
-  chains to it can be published before anything is ever written.
+  chains to it can be published before anything is ever written. Both implement
+  the same `Hook` interface — `SetDetour` and `Original` are non-virtual
+  templates over a virtual raw operation — which is what lets hooks of different
+  kinds be held together. Each has two factories: `Create` for a hook that lives
+  in one scope, `CreateDynamic` for one that has to outlive it. The second
+  exists because the hooks are deliberately not movable: they own a patched slot,
+  and two live copies would both try to restore it.
 - **`afw::process`** — module bases and reads that report an unreadable address
   instead of faulting: a wrong offset becomes a `std::error_code`, not a crash in
   the host process.
@@ -64,11 +70,25 @@ Implemented:
 - **`afw::menu`** — the overlay's user interface and its message routing:
   `INSERT` shows and hides it, and while it is up the game does not see the
   input it consumes.
+- **`afw::app`** — the injected DLL's whole session, with nothing title-specific
+  in it: the file log, the `Present` and window-procedure hooks, the menu, the
+  detour drain and the self-unload. `ScopedHooks` owns everything installed and
+  takes it back off in reverse at scope exit; a title plugs in through
+  `afw::app::Game` — its own hooks and its own per-frame drawing — and that is
+  the seam a second title reuses unchanged.
 - **`injector.exe`** / **`aimbot.dll`** — the working pair, verified in the game.
+  The DLL is 30 lines: an entry point that starts a thread and hands one `Game`
+  to `afw::app::Run`.
 
 Skeleton — the header, target and empty namespace are in place, the code is not:
 
 - **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic.
+- **`afw::games::doom3`** — Doom 3 (id Tech 4). Chosen for **OpenGL**, and
+  because its engine source is published: the structures do not have to be
+  recovered from a disassembly first. Far Cry 3 cost months of that, and it is
+  not what the project is for.
+- **`afw::games::q2rtx`** — Quake II RTX (Q2PRO lineage). Chosen for **Vulkan**,
+  and for the same reason: single-player, and the sources are there.
 
 An inline/trampoline hook is still absent, and it turned out not to be needed:
 the engine's per-frame entity walk is reached through a virtual call, so the
@@ -86,8 +106,10 @@ same `VmtHook` that intercepts `Present` intercepts it too.
 | M7 | ESP: entity list to boxes | done |
 | M4 | input: `WndProcHook`, overlay toggle | done |
 | M8 | menu: ESP toggle, self-unload | done |
+| M10 | `afw::app`: the session lifted out of `dllmain`, no title left in it | done |
 | M5 | `ResizeBuffers` | not blocking — the render target view is rebuilt every frame |
 | M9 | aim assist | next |
+| M11 | OpenGL and Vulkan frame hooks; untie `esp` from one title | planned |
 
 M6 was taken before M4 and M5 deliberately: the geometry is the part the project
 exists to learn, and it needs neither input nor a cached render target.
@@ -107,6 +129,18 @@ other, sharing state only through `afw::config`. That way the ESP runs with
 settings alone and needs no user interface present, and the DLL shim is the only
 place that knows both exist.
 
+The next two titles are picked to put pressure on exactly the places that are
+still tied to one renderer. Far Cry 3 is Direct3D 11, Doom 3 is OpenGL, Quake II
+RTX is Vulkan — so `IDXGISwapChain::Present` stops being *the* frame hook and
+becomes one of three, alongside `wglSwapBuffers` and `vkQueuePresentKHR`. Both
+are single-player and long dead, which keeps the scope where the licence puts
+it. Both also have published engine sources, which is a separate and purely
+practical matter: the months Far Cry 3 took to recover from a disassembly are
+not the part of this worth repeating. `afw::app` already carries no knowledge of
+a title; `afw::esp` still links
+`afw::games::fc3` directly and has to be untied from it before the second title
+can draw anything.
+
 ## Architecture
 
 Libraries and the direction they depend in. Solid arrows are `PUBLIC` links,
@@ -120,16 +154,19 @@ graph TD
     DLL[aimbot.dll]
   end
 
-  DLL -.-> MENU[afw::menu]
+  DLL -.-> APP[afw::app]
   DLL -.-> ESP[afw::esp]
   DLL -.-> FC3[afw::games::fc3]
-  DLL -.-> RENDER[afw::render]
   DLL -.-> AIMBOT[afw::aimbot]
-  DLL -.-> CONFIG[afw::config]
   DLL -.-> WIN[afw::win]
   INJ -.-> REMOTE[afw::remote]
   INJ -.-> WIN
 
+  APP --> HOOK[afw::hook]
+  APP -.-> RENDER[afw::render]
+  APP -.-> MENU[afw::menu]
+  APP -.-> CONFIG[afw::config]
+  APP -.-> WIN
   MENU --> CONFIG
   MENU -.-> RENDER
   ESP --> CONFIG
@@ -139,17 +176,23 @@ graph TD
   AIMBOT --> PROCESS[afw::process]
   FC3 --> PROCESS
   FC3 --> MATH
-  FC3 --> HOOK[afw::hook]
+  FC3 --> HOOK
   RENDER --> HOOK
   RENDER -.-> WIN
   REMOTE --> WIN
   HOOK -.-> WIN
 ```
 
-`menu` and `esp` are siblings: neither references the other, and they share
-state only through `config`, so the ESP runs with no user interface present.
-`config` and `math` are the libraries with no Win32 dependency, so they build
-everywhere � and they are the two whose tests run on any platform.
+`afw::app` is the layer with no edge to any game: everything below it is either
+generic or a title the DLL chooses at link time. `menu` and `esp` are siblings:
+neither references the other, and they share state only through `config`, so the
+ESP runs with no user interface present. `config` and `math` are the libraries
+with no Win32 dependency, so they build everywhere — and they are the two whose
+tests run on any platform.
+
+The one edge that does not belong in that picture is `esp -.-> games::fc3`. It
+is drawn because it is real, not because it is right: the ESP reaches into one
+specific title for its entity list instead of being handed one.
 
 The types themselves:
 
@@ -180,19 +223,36 @@ classDiagram
     +Slot(size_t) void**
     +At(size_t) void*
   }
-  class VmtHook {
-    +Create(Vtable, size_t)$ expected
+  class Hook {
+    <<abstract>>
     +SetDetour(Fn) expected
     +Original() Fn
-    +Enable() expected
-    +Disable() expected
+    +Enable()* expected
+    +Disable()* expected
+  }
+  class VmtHook {
+    +Create(Vtable, size_t)$ expected
+    +CreateDynamic(Vtable, size_t)$ expected
   }
   class WndProcHook {
     +Create(HWND)$ expected
-    +SetDetour(WNDPROC) expected
-    +Original() WNDPROC
-    +Enable() expected
-    +Disable() expected
+    +CreateDynamic(HWND)$ expected
+  }
+
+  class InstalledHook {
+    <<abstract>>
+  }
+  class HookEntry~Binding~ {
+    +Failure() error_code
+  }
+  class ScopedHooks {
+    +Add(expected, Detour, name) bool
+  }
+  class Game {
+    <<abstract>>
+    +Name()* char*
+    +InstallHooks(ScopedHooks)*
+    +OnFrame()*
   }
 
   class PresentBinding
@@ -228,22 +288,30 @@ classDiagram
     +float fovRadians
     +float fovHorizontalRadians
   }
+  class Aabb {
+    +Vec3 min
+    +Vec3 max
+    +Extent() Vec3
+    +Corner(size_t) Vec3
+    +IsValid(float) bool
+  }
+  class PawnInfo {
+    +int32 army
+    +int32 faction
+    +uint8 hostileMask
+    +bool dead
+  }
   class EntityInfo {
     +uintptr address
     +uintptr vtable
-    +Vec3 position
-    +Vec3 axisX
-    +Vec3 axisY
-    +Vec3 axisZ
-    +Vec3 aabbMin
-    +Vec3 aabbMax
-    +int32 army
-    +bool pawn
+    +Matrix4 transform
+    +Aabb box
+    +optional~PawnInfo~ pawn
     +bool humanoid
-    +bool dead
   }
   class EntitySnapshot {
     +uint32 count
+    +uint32 dropped
     +uint32 pawns
     +uint32 humanoids
     +EntityInfo[] items
@@ -260,13 +328,22 @@ classDiagram
     +bool unloadRequested
   }
 
+  Hook <|-- VmtHook
+  Hook <|-- WndProcHook
   VmtHook --> Vtable : reads a slot from
   VmtHook ..> ProtectGuard : unprotects through
-  PresentBinding --> VmtHook : publishes the original of
-  UpdateBinding --> VmtHook : publishes the original of
+  InstalledHook <|-- HookEntry
+  ScopedHooks o-- InstalledHook : owns, unwinds in reverse
+  HookEntry o-- Hook
+  HookEntry o-- PresentBinding : and one binding
+  PresentBinding ..> Hook : publishes the original of
+  UpdateBinding ..> Hook : publishes the original of
+  Game ..> ScopedHooks : installs its own hooks into
   EntitySnapshot o-- EntityInfo
+  EntityInfo o-- Aabb
+  EntityInfo o-- PawnInfo
+  Aabb o-- Vec3
   CameraBasis o-- Vec3
-  EntityInfo o-- Vec3
   CameraBasis ..> Matrix4 : builds
   Matrix4 ..> Vec3 : projects
   Vec3 ..> ScreenPoint : becomes
@@ -284,25 +361,33 @@ third_party/
 docs/
   images/               screenshots referenced from this file
 include/afw/            public headers (sibling of src/)
-  win/ remote/ hook/ process/ render/ esp/ menu/ config/ math/ games/fc3/
+  win/ remote/ hook/ process/ render/ esp/ menu/ app/ config/ math/ games/fc3/
                                                                    implemented
-  aimbot/                                                            skeleton
+  aimbot/ games/doom3/ games/q2rtx/                                  skeleton
 src/
-  win/ remote/ hook/ process/ render/ esp/ menu/ games/fc3/  STATIC, Windows-only
+  win/ remote/ hook/ process/ render/ esp/ menu/ app/ games/fc3/
+                                          STATIC, Windows-only
   config/ math/                           STATIC, platform-agnostic
-  aimbot/                                 STATIC, skeleton
+  aimbot/ games/doom3/ games/q2rtx/       STATIC, skeleton
 injector/
   injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
 dll/
-  dllmain.cpp           entry point -> hooks Present, the entity walk and the
-                        window procedure, then waits for the unload request
+  dllmain.cpp           entry point -> starts a thread, hands one Game to
+                        afw::app::Run, and nothing else
+  farcry3.cpp/.hpp      the Far Cry 3 Game: its entity-walk detour, its status
+                        line and what it draws each frame
 tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
 
-Dependency direction: `games::* -> process`; `render -> hook -> win`; `esp` sits
-on `render` and `games::fc3`; `menu` is its sibling and they share `config`. No
-library contains a Windows entry point.
+Dependency direction: `games::* -> process`; `render -> hook -> win`; `app` sits
+on `render`, `menu` and `hook` and knows no game; `esp` sits on `render` and
+still on `games::fc3`; `menu` is its sibling and they share `config`. No library
+contains a Windows entry point.
+
+`dll/` is flat because there is one title in it. Each title gets its own DLL —
+the game is chosen at link time, never at run time — so a second one means a
+second target, not a runtime switch.
 
 `afw::process` reads this process's memory through the Win32 API, so it and the
 libraries built on it (`games::*`, `aimbot`) are added only under `WIN32`;
@@ -433,16 +518,22 @@ Unloading restores the window procedure and both hooked slots in the reverse
 order they went on, waits for the threads still inside a detour to leave, then
 releases the ImGui contexts and calls `FreeLibraryAndExitThread`.
 
-Two things make that safe, and both had to be learned the hard way:
+Two things make that safe, both learned the hard way, and both now live in one
+place each so they cannot be got wrong again:
 
 - Each hook is disabled **explicitly**, before the binding that publishes its
   original goes out of scope. Left to destruction order it happens the other way
   round, and in that window a detour finds no original to chain to — the entity
-  update pass is skipped and `Present` returns without showing a frame.
+  update pass is skipped and `Present` returns without showing a frame. The order
+  is now a property of `HookEntry`: `Disable()` runs in the destructor body, and
+  the binding is declared after the hook, so it dies between the two.
 - The threads are counted in and out of every detour, and the unload waits for
   that count to reach zero instead of sleeping a guessed interval. Restoring a
   slot stops new calls from entering; it says nothing about the calls already
   inside, and unmapping the module out from under one of them hangs the game.
+  The counter is exact for a thread inside a detour body; the short settle after
+  it covers the one gap it cannot — a thread that has read the slot but not yet
+  reached the guard.
 
 ### Presets
 

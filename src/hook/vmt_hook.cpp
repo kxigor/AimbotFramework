@@ -7,6 +7,8 @@
 #include <afw/win/protect_guard.hpp>
 #include <cstddef>
 #include <expected>
+#include <memory>
+#include <new>
 #include <system_error>
 #include <tuple>
 #include <utility>
@@ -33,9 +35,12 @@ namespace {
   return *slot;
 }
 
-}  // namespace
+struct SlotParts {
+  void** slot{nullptr};
+  void* original{nullptr};
+};
 
-std::expected<VmtHook, std::error_code> VmtHook::Create(
+[[nodiscard]] std::expected<SlotParts, std::error_code> Resolve(
     Vtable table, std::size_t index) noexcept {
   void** const kSlot{table.Slot(index)};
 
@@ -44,8 +49,36 @@ std::expected<VmtHook, std::error_code> VmtHook::Create(
     return std::unexpected{kOriginal.error()};
   }
 
-  return std::expected<VmtHook, std::error_code>{std::in_place, AdoptTag{},
-                                                 kSlot, *kOriginal};
+  return SlotParts{.slot = kSlot, .original = *kOriginal};
+}
+
+}  // namespace
+
+std::expected<VmtHook, std::error_code> VmtHook::Create(
+    Vtable table, std::size_t index) noexcept {
+  const std::expected<SlotParts, std::error_code> kParts{Resolve(table, index)};
+  if (!kParts) {
+    return std::unexpected{kParts.error()};
+  }
+
+  return std::expected<VmtHook, std::error_code>{
+      std::in_place, AdoptTag{}, kParts->slot, kParts->original};
+}
+
+std::expected<std::unique_ptr<VmtHook>, std::error_code> VmtHook::CreateDynamic(
+    Vtable table, std::size_t index) noexcept {
+  const std::expected<SlotParts, std::error_code> kParts{Resolve(table, index)};
+  if (!kParts) {
+    return std::unexpected{kParts.error()};
+  }
+
+  std::unique_ptr<VmtHook> hook{
+      new (std::nothrow) VmtHook{AdoptTag{}, kParts->slot, kParts->original}};
+  if (!hook) {
+    return std::unexpected{std::make_error_code(std::errc::not_enough_memory)};
+  }
+
+  return hook;
 }
 
 VmtHook::VmtHook(AdoptTag /*tag*/, void** slot, void* original) noexcept
@@ -63,6 +96,8 @@ std::expected<void, std::error_code> VmtHook::SetDetourRaw(
 
   return {};
 }
+
+void* VmtHook::OriginalRaw() const noexcept { return kOriginal_; }
 
 std::expected<void, std::error_code> VmtHook::Enable() noexcept {
   if (detour_ == nullptr) {

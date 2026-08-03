@@ -15,12 +15,14 @@
 #   afw::render       owns the Present hook; the overlay's foundation
 #   afw::menu         the overlay's user interface
 #   afw::esp          entity boxes projected into screen space
+#   afw::app          the injected DLL's session, with no title-specific parts
 #
 # Dependency direction: games::* -> process ; render -> hook -> win ; menu and
 # esp are siblings on top of render, sharing state only through config, so
-# neither one requires the other to run. The DLL shim wires a game into the
-# overlay. None contains a Windows entry point. process / games / aimbot are
-# still empty skeletons; afw::remote is implemented and Windows-only.
+# neither one requires the other to run. afw::app sits on top of render and
+# menu and knows no game; the DLL shim supplies one through afw::app::Game.
+# None contains a Windows entry point. process / games / aimbot are still empty
+# skeletons; afw::remote is implemented and Windows-only.
 
 add_subdirectory(config)
 add_subdirectory(math)
@@ -40,4 +42,5 @@ if(WIN32)
   add_subdirectory(render)
   add_subdirectory(menu)
   add_subdirectory(esp)
+  add_subdirectory(app)
 endif()

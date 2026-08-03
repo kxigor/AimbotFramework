@@ -7,6 +7,7 @@
 #include <bit>
 #include <cstddef>
 #include <expected>
+#include <memory>
 #include <support/win_probe.hpp>
 #include <system_error>
 
@@ -95,6 +96,42 @@ TEST_F(VmtHookUnit, CreateRejectsAnUnreadableSlot) {
   EXPECT_EQ(kHook.error(),
             afw::hook::make_error_code(afw::hook::Error::SlotNotReadable));
   EXPECT_EQ(&kHook.error().category(), &afw::hook::ErrorCategory());
+}
+
+TEST_F(VmtHookUnit, CreateDynamicPublishesTheSameOriginalOnTheHeap) {
+  const std::expected<std::unique_ptr<afw::hook::VmtHook>, std::error_code>
+      kHook{afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{table_}, kSlot)};
+
+  ASSERT_TRUE(kHook.has_value()) << kHook.error().message();
+  ASSERT_NE(kHook->get(), nullptr);
+  EXPECT_EQ((*kHook)->Original<ProbeFn>()(), 1);
+  EXPECT_EQ(CallSlot(), 1);
+}
+
+TEST_F(VmtHookUnit, CreateDynamicRejectsAnUnreadableSlotTheSameWay) {
+  void** unmapped{nullptr};
+  {
+    const LPVOID kReserved{VirtualAlloc(
+        /*lpAddress        = */ nullptr,
+        /*dwSize           = */ kTableSize,
+        /*flAllocationType = */ MEM_RESERVE,
+        /*flProtect        = */ PAGE_NOACCESS)};
+    ASSERT_NE(kReserved, nullptr);
+    ASSERT_NE(VirtualFree(
+                  /*lpAddress  = */ kReserved,
+                  /*dwSize     = */ 0,
+                  /*dwFreeType = */ MEM_RELEASE),
+              FALSE);
+    unmapped = static_cast<void**>(kReserved);
+  }
+
+  const std::expected<std::unique_ptr<afw::hook::VmtHook>, std::error_code>
+      kHook{
+          afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{unmapped}, kSlot)};
+
+  ASSERT_FALSE(kHook.has_value());
+  EXPECT_EQ(kHook.error(),
+            afw::hook::make_error_code(afw::hook::Error::SlotNotReadable));
 }
 
 TEST_F(VmtHookUnit, SetDetourDoesNotTouchTheSlot) {
