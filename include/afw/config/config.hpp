@@ -1,9 +1,11 @@
 #pragma once
 
+#include <atomic>
+
 namespace afw::config {
 
 struct Settings {
-  bool espEnabled{true};
+  std::atomic<bool> espEnabled{true};
   bool menuVisible{true};
   bool unloadRequested{false};
 };

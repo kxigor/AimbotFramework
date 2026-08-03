@@ -68,7 +68,10 @@ void Draw() noexcept {
 
   ImGui::Text("%.1f FPS", static_cast<double>(ImGui::GetIO().Framerate));
   ImGui::SeparatorText("features");
-  ImGui::Checkbox("ESP", &settings.espEnabled);
+  bool espEnabled{settings.espEnabled.load()};
+  if (ImGui::Checkbox("ESP", &espEnabled)) {
+    settings.espEnabled.store(espEnabled);
+  }
 
   ImGui::SeparatorText("session");
   ImGui::TextUnformatted("INSERT shows and hides this window");

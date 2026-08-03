@@ -8,6 +8,7 @@
 #include <bit>
 #include <cstdint>
 #include <expected>
+#include <limits>
 #include <support/win_probe.hpp>
 #include <system_error>
 
@@ -118,6 +119,17 @@ TEST(ProcessMemoryUnit, ReadAtRejectsAReadThatWouldLeaveTheRegion) {
       /*lpAddress  = */ kPage,
       /*dwSize     = */ 0,
       /*dwFreeType = */ MEM_RELEASE);
+}
+
+// A read one byte below the top of the address space makes begin + size wrap.
+// Left unguarded, the wrapped range compares as covered by every cached region,
+// IsReadable says yes, and the memcpy takes an access violation inside the game
+// -- which is exactly how this was found.
+TEST(ProcessMemoryUnit, RefusesARangeThatWrapsPastTheEndOfTheAddressSpace) {
+  const std::uintptr_t kTop{std::numeric_limits<std::uintptr_t>::max()};
+
+  EXPECT_FALSE(afw::process::IsReadable(std::bit_cast<LPCVOID>(kTop), 4));
+  EXPECT_FALSE(afw::process::ReadAt<std::uint32_t>(kTop).has_value());
 }
 
 // The one test that ties afw::math::Vec3 to the engine's memory: it is read

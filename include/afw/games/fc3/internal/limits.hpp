@@ -12,11 +12,17 @@ namespace afw::games::fc3 {
 // A bad count would otherwise turn one misread field into an unbounded walk.
 constexpr std::uint32_t kMaxGroups{256};
 constexpr std::uint32_t kMaxGroupEntities{4096};
+constexpr std::uint32_t kMaxComponents{128};
 
 // 0 Blue, 1 Red, 2 Grey, 3 Neutral, 4 Green, 5 Yellow.
 constexpr std::int32_t kMaxArmy{5};
 // 0 Unknown, 1 Rebel, 2 Pirate, 3 Privateer.
 constexpr std::int32_t kMaxFaction{3};
+
+// The mask a pawn carries when it belongs to no army at all; kNoArmy, its
+// counterpart, sits next to PawnInfo because it is a field value rather than a
+// bound.
+constexpr std::uint8_t kNoArmyBit{0xFF};
 
 // Loose on purpose: the engine stores already normalised vectors, and garbage
 // misses by orders rather than by hundredths.

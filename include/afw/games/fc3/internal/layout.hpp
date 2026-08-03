@@ -46,10 +46,31 @@ constexpr std::uintptr_t kEntityGroupCount{0x08};
 
 // The row-major world matrix: rows 0..2 are the axes, row 3 at +0x50 is the
 // position. Read whole rather than row by row.
+//
+// This copy is only authoritative for an entity that has no physics component.
+// Entity_GetBoneHandleTableAndBaseMatrix at 0x11336d3a picks between the two:
+// component + kComponentWorldMatrix when GetPhysComponent finds one, this
+// otherwise. Everything that moves has one, which is why reading this alone
+// left characters, animals and vehicles without a usable transform.
 constexpr std::uintptr_t kEntityTransform{0x20};
+
+constexpr std::uintptr_t kEntityComponentArray{0x88};
+constexpr std::uintptr_t kEntityComponentCount{0x8C};
+
+// Byte offset, confirmed at 0x11336d60 (ADD EDI,0x100); the decompiler renders
+// it as +0x40 because it is pointer arithmetic on the component type. Which
+// component the engine picks is decided by a class hash it obtains through a
+// virtual call, so the walk here identifies it by the data instead: only the
+// right one holds a rigid basis at this offset. Do not replace that with a
+// hardcoded vtable without checking the class -- GetPhysComponent is named for
+// CCharacterPhysComponent but looks up CGraphicComponent.
+constexpr std::uintptr_t kComponentWorldMatrix{0x100};
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};
+
+// CEntity keeps its own liveness flag well before the pawn fields start.
+constexpr std::uintptr_t kEntityIsAlive{0x9A};
 
 constexpr std::uintptr_t kPawnIsDead{0x258};
 constexpr std::uintptr_t kPawnOwnArmyBit{0x280};
@@ -57,5 +78,7 @@ constexpr std::uintptr_t kPawnHostileMask{0x281};
 constexpr std::uintptr_t kPawnReverseHostile{0x283};
 constexpr std::uintptr_t kPawnArmy{0x284};
 constexpr std::uintptr_t kPawnFaction{0x290};
+// A hashed name, not a small enum: 0xC940191A was read from a live civilian.
+constexpr std::uintptr_t kPawnAgentType{0x294};
 
 }  // namespace afw::games::fc3

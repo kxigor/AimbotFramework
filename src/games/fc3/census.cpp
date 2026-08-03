@@ -3,8 +3,8 @@
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/process/memory.hpp>
-#include <algorithm>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
@@ -42,24 +42,62 @@ constexpr std::uint32_t kAlignmentBits{4};
   return true;
 }
 
-EntitySnapshot& PendingSnapshot() noexcept {
-  static EntitySnapshot snapshot{};
-  return snapshot;
+struct CensusBuffer {
+  EntityCensus census{};
+  EntitySnapshot snapshot{};
+};
+
+constexpr std::size_t kBuffers{3};
+
+[[nodiscard]] std::array<CensusBuffer, kBuffers>& Buffers() noexcept {
+  static std::array<CensusBuffer, kBuffers> buffers{};
+  return buffers;
 }
 
-EntitySnapshot& PublishedSnapshot() noexcept {
-  static EntitySnapshot snapshot{};
-  return snapshot;
+[[nodiscard]] std::atomic<std::size_t>& ReadySlot() noexcept {
+  static std::atomic<std::size_t> ready{1};
+  return ready;
 }
 
-EntityCensus& Pending() noexcept {
-  static EntityCensus census{};
-  return census;
+[[nodiscard]] std::atomic<bool>& ReadyIsFresh() noexcept {
+  static std::atomic<bool> fresh{false};
+  return fresh;
 }
 
-EntityCensus& Published() noexcept {
-  static EntityCensus census{};
-  return census;
+[[nodiscard]] std::atomic<bool>& GenerationWanted() noexcept {
+  static std::atomic<bool> wanted{true};
+  return wanted;
+}
+
+[[nodiscard]] std::size_t& WritingIndex() noexcept {
+  static std::size_t index{0};
+  return index;
+}
+
+[[nodiscard]] std::size_t& PublishedIndex() noexcept {
+  static std::size_t index{2};
+  return index;
+}
+
+[[nodiscard]] std::uint32_t& PublishedFrames() noexcept {
+  static std::uint32_t frames{0};
+  return frames;
+}
+
+// A generation is everything the engine walked between two presented frames.
+// One pass is not a whole world -- several of them together are -- so the
+// boundary belongs to the reader, and the writer only acts on the request.
+void BeginGeneration() noexcept {
+  WritingIndex() =
+      ReadySlot().exchange(WritingIndex(), std::memory_order_acq_rel);
+  ReadyIsFresh().store(true, std::memory_order_release);
+
+  CensusBuffer& fresh{Buffers().at(WritingIndex())};
+  fresh.census = EntityCensus{};
+  fresh.snapshot.ForgetCounts();
+
+  Seen().fill(0);
+  process::ForgetReadableRegions();
 }
 
 const hook::Hook*& BoundUpdate() noexcept {
@@ -70,21 +108,22 @@ const hook::Hook*& BoundUpdate() noexcept {
 void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
   const std::expected<RawEntity, std::error_code> kRaw{ReadEntity(address)};
   if (!kRaw) {
-    ++snapshot.notEntities;
+    ++snapshot.unreadable;
     return;
   }
 
   std::expected<EntityInfo, Rejection> classified{Classify(*kRaw)};
   if (!classified) {
-    if (classified.error() == Rejection::NotAnEntity) {
-      ++snapshot.notEntities;
+    ++snapshot.rejected.at(static_cast<std::size_t>(classified.error()));
+    if (classified.error() == Rejection::NotRigid) {
+      snapshot.SampleNotRigid(address);
     }
     return;
   }
 
-  if (classified->humanoid) {
-    classified->pawn = ReadPawn(address);
-  }
+  // Asked of every entity, not only the ones shaped like a person: an animal is
+  // a pawn too, and the army invariant is what proves the record real.
+  classified->pawn = ReadPawn(address);
 
   snapshot.items.at(snapshot.count) = *classified;
   ++snapshot.count;
@@ -111,7 +150,7 @@ void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
     return 0;
   }
 
-  EntitySnapshot& snapshot{PendingSnapshot()};
+  EntitySnapshot& snapshot{Buffers().at(WritingIndex()).snapshot};
 
   for (std::uint32_t index{0}; index < *kCount; ++index) {
     if (snapshot.count >= kMaxEntities) {
@@ -139,7 +178,11 @@ void** RunAllGroupSlot() noexcept {
 }
 
 void TakeCensus(std::uintptr_t scheduler) noexcept {
-  EntityCensus& census{Pending()};
+  if (GenerationWanted().exchange(false, std::memory_order_acquire)) {
+    BeginGeneration();
+  }
+
+  EntityCensus& census{Buffers().at(WritingIndex()).census};
   ++census.calls;
 
   const std::expected<std::uintptr_t, std::error_code> kGroups{
@@ -173,33 +216,25 @@ void TakeCensus(std::uintptr_t scheduler) noexcept {
 }
 
 void PublishCensus() noexcept {
-  EntityCensus census{Pending()};
-  census.frames = Published().frames + 1;
+  if (ReadyIsFresh().exchange(false, std::memory_order_acquire)) {
+    PublishedIndex() =
+        ReadySlot().exchange(PublishedIndex(), std::memory_order_acq_rel);
+  }
 
-  Published() = census;
-  Pending() = EntityCensus{};
-
-  EntitySnapshot& pending{PendingSnapshot()};
-  EntitySnapshot& published{PublishedSnapshot()};
-  published.count = pending.count;
-  published.dropped = pending.dropped;
-  published.pawns = pending.pawns;
-  published.humanoids = pending.humanoids;
-  published.notEntities = pending.notEntities;
-  std::copy_n(pending.items.begin(), pending.count, published.items.begin());
-
-  pending.count = 0;
-  pending.dropped = 0;
-  pending.pawns = 0;
-  pending.humanoids = 0;
-  pending.notEntities = 0;
-  Seen().fill(0);
-  process::ForgetReadableRegions();
+  ++PublishedFrames();
+  GenerationWanted().store(true, std::memory_order_release);
 }
 
-EntityCensus LastCensus() noexcept { return Published(); }
+EntityCensus LastCensus() noexcept {
+  EntityCensus census{Buffers().at(PublishedIndex()).census};
+  census.frames = PublishedFrames();
 
-const EntitySnapshot& LastSnapshot() noexcept { return PublishedSnapshot(); }
+  return census;
+}
+
+const EntitySnapshot& LastSnapshot() noexcept {
+  return Buffers().at(PublishedIndex()).snapshot;
+}
 
 UpdateBinding::UpdateBinding(const hook::Hook& hook) noexcept {
   BoundUpdate() = &hook;

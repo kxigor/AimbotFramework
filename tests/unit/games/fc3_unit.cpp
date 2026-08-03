@@ -2,11 +2,14 @@
 #include <windows.h>
 
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/entity.hpp>
 #include <array>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
+#include <atomic>
 #include <cstring>
+#include <thread>
 #include <tuple>
 
 namespace {
@@ -37,6 +40,21 @@ constexpr std::uint32_t kEntityGroupCount{0x08};
 constexpr std::uint32_t kEntitiesOne{7};
 constexpr std::uint32_t kEntitiesTwo{5};
 constexpr std::uint32_t kMaxGroups{256};
+
+// Two fake entities, far enough apart that the pawn fields of the first do not
+// reach into the second. The offsets are the ones internal/layout.hpp uses.
+constexpr std::uint32_t kEntityOne{0x400};
+constexpr std::uint32_t kEntityTwo{0x800};
+
+constexpr std::uint32_t kEntityTransform{0x20};
+constexpr std::uint32_t kEntityAabb{0x6C};
+constexpr std::uint32_t kPawnOwnArmyBit{0x280};
+constexpr std::uint32_t kPawnArmy{0x284};
+constexpr std::uint32_t kPawnFaction{0x290};
+
+constexpr std::uint32_t kRowBytes{0x10};
+constexpr std::uint32_t kVec3Bytes{0x0C};
+constexpr std::uintptr_t kWorldWrap{0x10000};
 
 class Fc3CensusUnit : public ::testing::Test {
  protected:
@@ -85,14 +103,50 @@ class Fc3CensusUnit : public ::testing::Test {
     std::memcpy(static_cast<std::byte*>(page_) + offset, &value, sizeof(value));
   }
 
+  void PokeFloat(std::uint32_t offset, float value) {
+    std::memcpy(static_cast<std::byte*>(page_) + offset, &value, sizeof(value));
+  }
+
+  // A rigid identity basis with the position in row 3, and an object-space box
+  // around the origin. Everything Classify insists on, and nothing else.
+  void PlaceEntity(std::uint32_t entity, float x, float y, float halfWidth,
+                   float height) {
+    Poke(entity, 0xABCD0000 + entity);
+
+    PokeFloat(entity + kEntityTransform, 1.0F);
+    PokeFloat(entity + kEntityTransform + kRowBytes + 4, 1.0F);
+    PokeFloat(entity + kEntityTransform + (2 * kRowBytes) + 8, 1.0F);
+    PokeFloat(entity + kEntityTransform + (3 * kRowBytes) + 12, 1.0F);
+
+    PokeFloat(entity + kEntityTransform + (3 * kRowBytes), x);
+    PokeFloat(entity + kEntityTransform + (3 * kRowBytes) + 4, y);
+    PokeFloat(entity + kEntityTransform + (3 * kRowBytes) + 8, 0.0F);
+
+    PokeFloat(entity + kEntityAabb, -halfWidth);
+    PokeFloat(entity + kEntityAabb + 4, -halfWidth);
+    PokeFloat(entity + kEntityAabb + 8, 0.0F);
+    PokeFloat(entity + kEntityAabb + kVec3Bytes, halfWidth);
+    PokeFloat(entity + kEntityAabb + kVec3Bytes + 4, halfWidth);
+    PokeFloat(entity + kEntityAabb + kVec3Bytes + 8, height);
+  }
+
   [[nodiscard]] std::uint32_t At(std::uint32_t offset) const {
     return base_ + offset;
+  }
+
+  // A generation is closed by the walk that follows the frame asking for one,
+  // so seeing what a walk found takes a second frame. The engine gets that for
+  // free; a test has to spell it out.
+  static void Settle(std::uint32_t scheduler) {
+    afw::games::fc3::PublishCensus();
+    afw::games::fc3::TakeCensus(scheduler);
+    afw::games::fc3::PublishCensus();
   }
 
   [[nodiscard]] static afw::games::fc3::EntityCensus Walk(
       std::uint32_t scheduler) {
     afw::games::fc3::TakeCensus(scheduler);
-    afw::games::fc3::PublishCensus();
+    Settle(scheduler);
     return afw::games::fc3::LastCensus();
   }
 
@@ -113,16 +167,19 @@ TEST_F(Fc3CensusUnit, CountsGroupsAndTheirEntities) {
 TEST_F(Fc3CensusUnit, EveryFrameIsCounted) {
   const std::uint32_t kBefore{afw::games::fc3::LastCensus().frames};
 
-  std::ignore = Walk(At(kScheduler));
-  const afw::games::fc3::EntityCensus kCensus{Walk(At(kScheduler))};
+  afw::games::fc3::PublishCensus();
+  afw::games::fc3::PublishCensus();
 
-  EXPECT_EQ(kCensus.frames, kBefore + 2);
+  EXPECT_EQ(afw::games::fc3::LastCensus().frames, kBefore + 2);
 }
 
+// One pass is not a whole world -- the engine walks it across several -- so a
+// generation must add them up. Publishing each pass on its own is what made the
+// overlay flicker.
 TEST_F(Fc3CensusUnit, SeveralPassesInOneFrameAccumulate) {
   afw::games::fc3::TakeCensus(At(kScheduler));
   afw::games::fc3::TakeCensus(At(kScheduler));
-  afw::games::fc3::PublishCensus();
+  Settle(At(kScheduler));
 
   const afw::games::fc3::EntityCensus kCensus{afw::games::fc3::LastCensus()};
 
@@ -131,14 +188,16 @@ TEST_F(Fc3CensusUnit, SeveralPassesInOneFrameAccumulate) {
   EXPECT_EQ(kCensus.entities, 2 * (kEntitiesOne + kEntitiesTwo));
 }
 
-TEST_F(Fc3CensusUnit, PublishingClearsTheAccumulator) {
+// A frame the engine did not walk keeps the last complete world rather than
+// blanking: the reader owns its buffer until a new generation is ready.
+TEST_F(Fc3CensusUnit, AFrameWithoutAWalkKeepsTheLastWorld) {
   std::ignore = Walk(At(kScheduler));
+
   afw::games::fc3::PublishCensus();
 
   const afw::games::fc3::EntityCensus kCensus{afw::games::fc3::LastCensus()};
 
-  EXPECT_EQ(kCensus.calls, 0U);
-  EXPECT_EQ(kCensus.entities, 0U);
+  EXPECT_EQ(kCensus.entities, kEntitiesOne + kEntitiesTwo);
 }
 
 TEST_F(Fc3CensusUnit, AnUnreadableSchedulerCountsNothing) {
@@ -164,6 +223,306 @@ TEST_F(Fc3CensusUnit, AnEmptyGroupIsSkipped) {
 
   EXPECT_EQ(kCensus.groups, 1U);
   EXPECT_EQ(kCensus.entities, kEntitiesOne);
+}
+
+// Everything below drives the half of the census the ESP actually draws from.
+// Before these, no test ever put a non-null pointer in an entity array, so
+// StoreEntity and the whole snapshot path ran in no test at all.
+class Fc3SnapshotUnit : public Fc3CensusUnit {
+ protected:
+  void SetUp() override {
+    Fc3CensusUnit::SetUp();
+    if (page_ == nullptr) {
+      return;
+    }
+
+    PlaceEntity(kEntityOne, 100.0F, 200.0F, 0.6F, 1.7F);
+    PlaceEntity(kEntityTwo, 300.0F, 400.0F, 2.0F, 5.0F);
+
+    Poke(kEntityArrayOne, At(kEntityOne));
+    Poke(kEntityArrayTwo, At(kEntityTwo));
+  }
+};
+
+TEST_F(Fc3SnapshotUnit, PublishesTheEntitiesTheWalkFound) {
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+
+  ASSERT_EQ(kSnapshot.count, 2U);
+  EXPECT_EQ(kSnapshot.humanoids, 1U);
+  EXPECT_EQ(kSnapshot.dropped, 0U);
+}
+
+TEST_F(Fc3SnapshotUnit, TellsAHumanoidShapedBoxFromAProp) {
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+
+  EXPECT_TRUE(kSnapshot.items.at(0).humanoid);
+  EXPECT_FALSE(kSnapshot.items.at(1).humanoid);
+  EXPECT_EQ(kSnapshot.items.at(0).address, At(kEntityOne));
+}
+
+TEST_F(Fc3SnapshotUnit, CarriesThePositionThroughUnchanged) {
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+
+  const afw::math::Vec3 kPosition{kSnapshot.items.at(0).transform.Translation()};
+  EXPECT_FLOAT_EQ(kPosition.x, 100.0F);
+  EXPECT_FLOAT_EQ(kPosition.y, 200.0F);
+}
+
+TEST_F(Fc3SnapshotUnit, GivesAHumanoidItsPawnRecordWhenTheArmyBitsAgree) {
+  Poke(kEntityOne + kPawnArmy, 2);
+  Poke(kEntityOne + kPawnOwnArmyBit, 1U << 2U);
+  Poke(kEntityOne + kPawnFaction, 1);
+
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+  ASSERT_TRUE(kSnapshot.items.at(0).pawn.has_value());
+  EXPECT_EQ(kSnapshot.items.at(0).pawn->army, 2);
+  EXPECT_EQ(kSnapshot.pawns, 1U);
+}
+
+TEST_F(Fc3SnapshotUnit, WithholdsThePawnRecordWhenTheArmyBitsDisagree) {
+  Poke(kEntityOne + kPawnArmy, 2);
+  Poke(kEntityOne + kPawnOwnArmyBit, 1U);
+
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+  EXPECT_FALSE(kSnapshot.items.at(0).pawn.has_value());
+  EXPECT_EQ(kSnapshot.pawns, 0U);
+}
+
+// The handoff itself: a walk must not change what the reader is looking at
+// until the frame that publishes it. Before the triple buffer, the walk wrote
+// into the very array the reader was iterating.
+TEST_F(Fc3SnapshotUnit, AWalkDoesNotDisturbTheSnapshotAlreadyPublished) {
+  std::ignore = Walk(At(kScheduler));
+  ASSERT_EQ(afw::games::fc3::LastSnapshot().count, 2U);
+
+  Poke(kEntityArrayOne, 0);
+  afw::games::fc3::PublishCensus();
+  afw::games::fc3::TakeCensus(At(kScheduler));
+
+  EXPECT_EQ(afw::games::fc3::LastSnapshot().count, 2U);
+
+  Settle(At(kScheduler));
+
+  EXPECT_EQ(afw::games::fc3::LastSnapshot().count, 1U);
+}
+
+// The reader holds a reference across a whole frame, so the buffer behind it
+// must not be the one the next walk writes into.
+TEST_F(Fc3SnapshotUnit, TheReaderKeepsItsBufferWhileTheNextWalkRuns) {
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kHeld{afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kHeld.count, 2U);
+
+  Poke(kEntityArrayOne, 0);
+  Poke(kEntityArrayTwo, 0);
+  afw::games::fc3::TakeCensus(At(kScheduler));
+  afw::games::fc3::TakeCensus(At(kScheduler));
+
+  EXPECT_EQ(kHeld.count, 2U);
+  EXPECT_EQ(kHeld.items.at(0).address, At(kEntityOne));
+}
+
+// ThreadSanitizer does not exist for this target, and the tests above are
+// single-threaded, so nothing so far can observe the race the triple buffer
+// exists to remove. This one creates it: the walk runs on its own thread while
+// the reader publishes and inspects. Each entity's position is set to its own
+// address, so a record stitched together from two different entities -- which
+// is what the old shared-buffer handoff produced -- fails the comparison.
+class Fc3HandoffUnit : public Fc3CensusUnit {
+ protected:
+  void SetUp() override {
+    Fc3CensusUnit::SetUp();
+    if (page_ == nullptr) {
+      return;
+    }
+
+    PlaceEntity(kEntityOne, PositionFor(At(kEntityOne)), 0.0F, 2.0F, 5.0F);
+    PlaceEntity(kEntityTwo, PositionFor(At(kEntityTwo)), 0.0F, 2.0F, 5.0F);
+
+    Poke(kEntityArrayTwo, At(kEntityTwo));
+
+    // The census statics outlive a test, and the fake page keeps the same base
+    // address, so the dedupe table can still hold these very entities from an
+    // earlier test. Closing one generation here clears it.
+    Settle(At(kScheduler));
+  }
+
+  // The whole address would land far outside kMaxWorldCoordinate and be
+  // rejected, so only the part that differs between the two entities is used.
+  [[nodiscard]] static float PositionFor(std::uintptr_t address) {
+    return static_cast<float>(address % kWorldWrap);
+  }
+
+  [[nodiscard]] static bool IsSelfConsistent(
+      const afw::games::fc3::EntityInfo& entity) {
+    return entity.transform.Translation().x == PositionFor(entity.address);
+  }
+};
+
+// esp::DrawFrame holds the reference LastSnapshot() returns across five passes
+// over the array and the whole ImGui build, which is milliseconds. So the
+// invariant is not "a record is consistent when read" but "the buffer does not
+// change underneath the reader for as long as it holds it".
+TEST_F(Fc3HandoffUnit, TheHeldSnapshotDoesNotChangeUnderTheReader) {
+  constexpr int kWalks{20000};
+  constexpr int kYields{64};
+
+  std::atomic<bool> walking{true};
+  std::thread writer{[this, &walking] {
+    for (int walk{0}; walk < kWalks; ++walk) {
+      Poke(kEntityArrayOne, (walk % 2) == 0 ? At(kEntityOne) : At(kEntityTwo));
+      afw::games::fc3::TakeCensus(At(kScheduler));
+    }
+    walking.store(false);
+  }};
+
+  std::uint32_t inspected{0};
+  std::uint32_t torn{0};
+  std::uint32_t moved{0};
+  while (walking.load()) {
+    afw::games::fc3::PublishCensus();
+
+    const afw::games::fc3::EntitySnapshot& kSnapshot{
+        afw::games::fc3::LastSnapshot()};
+    ASSERT_LE(kSnapshot.count, afw::games::fc3::kMaxEntities);
+    if (kSnapshot.count == 0) {
+      continue;
+    }
+
+    const std::uint32_t kCount{kSnapshot.count};
+    const std::uintptr_t kAddress{kSnapshot.items.at(0).address};
+    const float kX{kSnapshot.items.at(0).transform.Translation().x};
+
+    for (int yield{0}; yield < kYields; ++yield) {
+      std::this_thread::yield();
+    }
+
+    ++inspected;
+    if (kSnapshot.count != kCount ||
+        kSnapshot.items.at(0).address != kAddress ||
+        kSnapshot.items.at(0).transform.Translation().x != kX) {
+      ++moved;
+    }
+    for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
+      if (!IsSelfConsistent(kSnapshot.items.at(index))) {
+        ++torn;
+      }
+    }
+  }
+
+  writer.join();
+
+  EXPECT_EQ(moved, 0U) << "the buffer changed while the reader held it";
+  EXPECT_EQ(torn, 0U);
+  EXPECT_GT(inspected, 0U) << "the reader never observed a published snapshot";
+}
+
+// The component walk is what reaches a moving entity's real world matrix. The
+// engine picks the component by a class hash it gets through a virtual call;
+// this picks it by the data, so the test is about that choice being sound.
+class Fc3ComponentUnit : public Fc3CensusUnit {
+ protected:
+  static constexpr std::uint32_t kEntity{0x600};
+  static constexpr std::uint32_t kComponentArray{0x700};
+  static constexpr std::uint32_t kComponentOne{0xA00};
+  static constexpr std::uint32_t kComponentTwo{0xB80};
+
+  static constexpr std::uint32_t kEntityComponentArray{0x88};
+  static constexpr std::uint32_t kEntityComponentCount{0x8C};
+  static constexpr std::uint32_t kComponentWorldMatrix{0x100};
+
+  void SetUp() override {
+    Fc3CensusUnit::SetUp();
+    if (page_ == nullptr) {
+      return;
+    }
+
+    Poke(kEntity + kEntityComponentArray, At(kComponentArray));
+    Poke(kEntity + kEntityComponentCount, 2);
+
+    Poke(kComponentArray, At(kComponentOne));
+    Poke(kComponentArray + sizeof(std::uint32_t), At(kComponentTwo));
+
+    PokeRigidMatrix(kComponentTwo + kComponentWorldMatrix, 7.0F, 8.0F, 9.0F);
+  }
+
+  void PokeRigidMatrix(std::uint32_t offset, float x, float y, float z) {
+    for (std::uint32_t cell{0}; cell < 16; ++cell) {
+      PokeFloat(offset + (cell * 4), 0.0F);
+    }
+    PokeFloat(offset + 0, 1.0F);
+    PokeFloat(offset + 20, 1.0F);
+    PokeFloat(offset + 40, 1.0F);
+    PokeFloat(offset + 60, 1.0F);
+
+    PokeFloat(offset + 48, x);
+    PokeFloat(offset + 52, y);
+    PokeFloat(offset + 56, z);
+  }
+};
+
+TEST_F(Fc3ComponentUnit, TakesTheMatrixFromTheComponentThatHoldsABasis) {
+  const auto kMatrix{afw::games::fc3::ReadComponentWorldMatrix(At(kEntity))};
+
+  ASSERT_TRUE(kMatrix.has_value());
+  EXPECT_FLOAT_EQ(kMatrix->Translation().x, 7.0F);
+  EXPECT_FLOAT_EQ(kMatrix->Translation().y, 8.0F);
+  EXPECT_FLOAT_EQ(kMatrix->Translation().z, 9.0F);
+}
+
+// The first component is scanned first and holds nothing basis-shaped, which is
+// the normal case: an entity carries many components and only one answers.
+TEST_F(Fc3ComponentUnit, StepsPastAComponentWhoseSlotIsNotABasis) {
+  PokeFloat(kComponentOne + kComponentWorldMatrix, 3.0F);
+
+  const auto kMatrix{afw::games::fc3::ReadComponentWorldMatrix(At(kEntity))};
+
+  ASSERT_TRUE(kMatrix.has_value());
+  EXPECT_FLOAT_EQ(kMatrix->Translation().x, 7.0F);
+}
+
+TEST_F(Fc3ComponentUnit, StepsOverAnEmptySlot) {
+  Poke(kComponentArray, 0);
+
+  const auto kMatrix{afw::games::fc3::ReadComponentWorldMatrix(At(kEntity))};
+
+  ASSERT_TRUE(kMatrix.has_value());
+  EXPECT_FLOAT_EQ(kMatrix->Translation().x, 7.0F);
+}
+
+TEST_F(Fc3ComponentUnit, FindsNothingWhenNoComponentHoldsABasis) {
+  PokeRigidMatrix(kComponentTwo + kComponentWorldMatrix, 0.0F, 0.0F, 0.0F);
+  PokeFloat(kComponentTwo + kComponentWorldMatrix, 5.0F);
+
+  EXPECT_FALSE(
+      afw::games::fc3::ReadComponentWorldMatrix(At(kEntity)).has_value());
+}
+
+TEST_F(Fc3ComponentUnit, RefusesAnImplausibleComponentCount) {
+  Poke(kEntity + kEntityComponentCount, 100000);
+
+  EXPECT_FALSE(
+      afw::games::fc3::ReadComponentWorldMatrix(At(kEntity)).has_value());
 }
 
 TEST_F(Fc3CensusUnit, AnImplausibleGroupCountIsCapped) {

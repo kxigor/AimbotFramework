@@ -3,6 +3,7 @@
 #include <afw/math/aabb.hpp>
 #include <afw/math/matrix4.hpp>
 #include <afw/math/vec3.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -29,11 +30,32 @@ struct Viewport {
   float height{};
 };
 
+// One value per reason, because "it did not appear" is the symptom that costs
+// the most time here: an NPC standing in front of you and not drawn has to be
+// traceable to the exact test that dropped it.
+enum class Rejection : std::uint8_t {
+  NoVtable,
+  NotRigid,
+  BadBox,
+  NonFinite,
+  BeyondTheWorld,
+  TemplateSpawn,
+};
+
+constexpr std::size_t kRejectionCount{6};
+
+// Read from a live civilian: army -1 with every bit set in the own-army mask,
+// faction -2. Soldiers instead carry an army in range and exactly the one bit
+// that names it.
+constexpr std::int32_t kNoArmy{-1};
+
 // Present only on an entity that passed the army invariant, so every field here
-// is meaningful whenever the record itself is.
+// is meaningful whenever the record itself is. army is kNoArmy for anything the
+// engine does not enlist -- civilians and animals both land there.
 struct PawnInfo {
   std::int32_t army{};
   std::int32_t faction{};
+  std::uint32_t agentType{};
   std::uint8_t ownArmyBit{};
   std::uint8_t hostileMask{};
   std::uint8_t reverseHostileMask{};

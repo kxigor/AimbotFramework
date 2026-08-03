@@ -54,7 +54,7 @@ TEST(Fc3ClassifyUnit, RejectsANullVtable) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NotAnEntity);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NoVtable);
 }
 
 // A component's bytes at the same offsets are not a transform, and a scaled
@@ -66,7 +66,7 @@ TEST(Fc3ClassifyUnit, RejectsAScaledBasis) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NotAnEntity);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NotRigid);
 }
 
 TEST(Fc3ClassifyUnit, RejectsASwappedBox) {
@@ -76,7 +76,7 @@ TEST(Fc3ClassifyUnit, RejectsASwappedBox) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NotAnEntity);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::BadBox);
 }
 
 TEST(Fc3ClassifyUnit, RejectsTheTemplateSpawnPoint) {
@@ -86,7 +86,7 @@ TEST(Fc3ClassifyUnit, RejectsTheTemplateSpawnPoint) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::OutsideTheWorld);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::TemplateSpawn);
 }
 
 // Only both axes together mean a template, so one of them alone is a place an
@@ -105,7 +105,7 @@ TEST(Fc3ClassifyUnit, RejectsANonFinitePosition) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::OutsideTheWorld);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::NonFinite);
 }
 
 TEST(Fc3ClassifyUnit, RejectsAPositionBeyondTheWorld) {
@@ -115,7 +115,7 @@ TEST(Fc3ClassifyUnit, RejectsAPositionBeyondTheWorld) {
   const auto kClassified{afw::games::fc3::Classify(raw)};
 
   ASSERT_FALSE(kClassified.has_value());
-  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::OutsideTheWorld);
+  EXPECT_EQ(kClassified.error(), afw::games::fc3::Rejection::BeyondTheWorld);
 }
 
 TEST(Fc3ClassifyUnit, MarksAHumanoidShapedBox) {

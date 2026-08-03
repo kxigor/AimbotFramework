@@ -1,6 +1,7 @@
 #pragma once
 
 #include <afw/games/fc3/internal/structs.hpp>
+#include <cstddef>
 #include <cstdint>
 #include <expected>
 #include <optional>
@@ -19,7 +20,14 @@ struct RawEntity {
   Aabb box{};
 };
 
-enum class Rejection : std::uint8_t { NotAnEntity, OutsideTheWorld };
+// The engine reaches a moving entity's world matrix through a component rather
+// than through the entity itself, and picks the component by class hash -- a
+// virtual call we cannot make from a read-only walk. This asks the same
+// question of the data instead: of the entity's components, the one whose
+// matrix slot holds an actually rigid basis is the one the engine would have
+// returned. Self-validating, and it needs no class constant to be right.
+[[nodiscard]] std::optional<Matrix4> ReadComponentWorldMatrix(
+    std::uintptr_t address) noexcept;
 
 [[nodiscard]] std::expected<RawEntity, std::error_code> ReadEntity(
     std::uintptr_t address) noexcept;

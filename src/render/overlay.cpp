@@ -39,6 +39,42 @@ Overlay& State() noexcept {
   return overlay;
 }
 
+class TargetGuard {
+ public:
+  explicit TargetGuard(ID3D11DeviceContext* context) noexcept
+      : context_{context} {
+    if (context_ != nullptr) {
+      context_->OMGetRenderTargets(
+          /*NumViews            = */ 1,
+          /*ppRenderTargetViews = */ target_.Put(),
+          /*ppDepthStencilView  = */ depth_.Put());
+    }
+  }
+
+  TargetGuard(const TargetGuard&) = delete;
+  TargetGuard& operator=(const TargetGuard&) = delete;
+
+  TargetGuard(TargetGuard&&) = delete;
+  TargetGuard& operator=(TargetGuard&&) = delete;
+
+  ~TargetGuard() {
+    if (context_ == nullptr) {
+      return;
+    }
+
+    const std::array<ID3D11RenderTargetView*, 1> kViews{target_.Get()};
+    context_->OMSetRenderTargets(
+        /*NumViews            = */ 1,
+        /*ppRenderTargetViews = */ kViews.data(),
+        /*pDepthStencilView   = */ depth_.Get());
+  }
+
+ private:
+  ID3D11DeviceContext* context_{nullptr};
+  win::ComPtr<ID3D11RenderTargetView> target_;
+  win::ComPtr<ID3D11DepthStencilView> depth_;
+};
+
 [[nodiscard]] std::expected<void, std::error_code> Initialize(
     IDXGISwapChain* swapChain) noexcept {
   DXGI_SWAP_CHAIN_DESC desc{};
@@ -160,6 +196,8 @@ std::expected<void, std::error_code> DrawOverlayFrame(
   }
 
   BuildFrame(onFrame);
+
+  const TargetGuard kTargets{State().context.Get()};
 
   const std::expected<void, std::error_code> kBound{BindBackBuffer(swapChain)};
   if (!kBound) {

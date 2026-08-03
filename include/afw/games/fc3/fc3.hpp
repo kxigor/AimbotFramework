@@ -26,7 +26,7 @@ struct Diagnostics {
   std::int32_t viewportHeight{};
 };
 
-using RunAllGroupFn = void(AFW_ENGINE_CALL*)(void* self, void* unused);
+using RunAllGroupFn = void(AFW_ENGINE_CALL*)(void* scheduler);
 
 struct EntityCensus {
   std::uint32_t frames{};
@@ -61,12 +61,38 @@ class UpdateBinding {
 
 constexpr std::size_t kMaxEntities{4096};
 
+constexpr std::size_t kRejectedSamples{8};
+
 struct EntitySnapshot {
+  void ForgetCounts() noexcept {
+    count = 0;
+    dropped = 0;
+    pawns = 0;
+    humanoids = 0;
+    unreadable = 0;
+    rejected.fill(0);
+    sampled = 0;
+    notRigidSample.fill(0);
+  }
+
+  // A count says how many were dropped but never which, and every question so
+  // far has needed one concrete address to inspect. These are the first few
+  // that failed the rigid-basis test.
+  void SampleNotRigid(std::uintptr_t address) noexcept {
+    if (sampled < kRejectedSamples) {
+      notRigidSample.at(sampled) = address;
+      ++sampled;
+    }
+  }
+
   std::uint32_t count{};
   std::uint32_t dropped{};
   std::uint32_t pawns{};
   std::uint32_t humanoids{};
-  std::uint32_t notEntities{};
+  std::uint32_t unreadable{};
+  std::array<std::uint32_t, kRejectionCount> rejected{};
+  std::uint32_t sampled{};
+  std::array<std::uintptr_t, kRejectedSamples> notRigidSample{};
   std::array<EntityInfo, kMaxEntities> items{};
 };
 

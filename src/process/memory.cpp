@@ -68,6 +68,11 @@ bool IsReadable(LPCVOID address, SIZE_T size) noexcept {
 
   const std::uintptr_t kBegin{std::bit_cast<std::uintptr_t>(address)};
   const std::uintptr_t kEnd{kBegin + size};
+  // A range that wraps past the end of the address space would otherwise leave
+  // kEnd below kBegin, and every cached region then covers it.
+  if (kEnd < kBegin) {
+    return false;
+  }
   if (CoveredByCache(kBegin, kEnd)) {
     return true;
   }

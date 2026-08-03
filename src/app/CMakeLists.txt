@@ -10,6 +10,7 @@
 add_library(afw_app STATIC
   app.cpp
   detour_guard.cpp
+  fault.cpp
   log.cpp
   module.cpp
 )

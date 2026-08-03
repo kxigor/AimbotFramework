@@ -2,6 +2,7 @@
 
 #include <afw/app/app.hpp>
 #include <afw/app/detour_guard.hpp>
+#include <afw/app/fault.hpp>
 #include <afw/app/game.hpp>
 #include <afw/app/log.hpp>
 #include <afw/app/module.hpp>
@@ -198,7 +199,10 @@ void Run(Game& game) noexcept {
   LogAttached(game);
   CurrentGame().store(&game);
 
-  RunSession(game);
+  {
+    const FaultLogger kFaults{};
+    RunSession(game);
+  }
 
   WaitForDetours();
   CurrentGame().store(nullptr);

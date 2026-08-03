@@ -25,6 +25,8 @@ namespace {
 constexpr float kNearPlane{0.1F};
 constexpr float kFarPlane{10000.0F};
 constexpr float kMarkerRadius{6.0F};
+constexpr float kCrosshairArm{11.0F};
+constexpr float kCrosshairThickness{1.5F};
 constexpr float kAheadDistance{2.0F};
 constexpr float kProbeDistance{10.0F};
 constexpr float kProbeOffset{2.0F};
@@ -43,15 +45,27 @@ constexpr ImU32 kHumanoidColour{0xFF00D0FF};
 constexpr std::array<ImU32, 6> kArmyColours{0xFFFF6030, 0xFF3030FF, 0xFFA0A0A0,
                                             0xFFFFFFFF, 0xFF30FF30, 0xFF30FFFF};
 
+// Same order as games::fc3::Rejection.
+constexpr std::array<const char*, games::fc3::kRejectionCount> kRejectionNames{
+    "no vtable",  "not rigid",        "bad box",
+    "not finite", "beyond the world", "template spawn"};
+
+// ImGui packs these as 0xAABBGGRR, so read them right to left.
+constexpr ImU32 kCivilianColour{0xFFA0FFA0};
+constexpr ImU32 kAnimalColour{0xFF5050C0};
+constexpr ImU32 kVehicleColour{0xFF40C0FF};
+constexpr float kVehicleMinSpan{2.5F};
+
 constexpr float kDrawDistance{150.0F};
 constexpr float kPropRadius{2.0F};
 constexpr float kBoxThickness{1.5F};
+constexpr float kVehicleThickness{2.5F};
 constexpr float kLabelLift{14.0F};
 constexpr std::size_t kLabelChars{64};
 constexpr std::size_t kVtableSlots{12};
 constexpr float kAimTolerance{0.95F};
-constexpr float kPanelWidth{470.0F};
-constexpr float kPanelHeight{820.0F};
+constexpr float kPanelWidth{540.0F};
+constexpr float kPanelHeight{1180.0F};
 
 [[nodiscard]] float VerticalFov(float horizontalRadians,
                                 float aspect) noexcept {
@@ -112,9 +126,15 @@ void ShowChain(const games::fc3::Diagnostics& report, const ImVec2& display) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   ImGui::Text("%-18s %u", "in the world", kSnapshot.count);
   ImGui::Text("%-18s %u", "over capacity", kSnapshot.dropped);
-  ImGui::Text("%-18s %u", "not entities", kSnapshot.notEntities);
   ImGui::Text("%-18s %u", "humanoid boxes", kSnapshot.humanoids);
-  ImGui::Text("%-18s %u", "pawns by class", kSnapshot.pawns);
+  ImGui::Text("%-18s %u", "pawns", kSnapshot.pawns);
+
+  ImGui::SeparatorText("dropped, by reason");
+  ImGui::Text("%-18s %u", "unreadable", kSnapshot.unreadable);
+  for (std::size_t reason{0}; reason < games::fc3::kRejectionCount; ++reason) {
+    ImGui::Text("%-18s %u", kRejectionNames.at(reason),
+                kSnapshot.rejected.at(reason));
+  }
 }
 
 void ShowAngle(const char* label, float radians) {
@@ -185,35 +205,75 @@ struct ScreenRect {
   return rect;
 }
 
-void DrawPawn(const games::fc3::EntityInfo& entity, const Matrix4& projection,
-              const ImVec2& display) {
+enum class Kind : std::uint8_t { Military, Civilian, Animal, Vehicle, Prop };
+
+// A pawn record only exists where the army invariant held, so its presence is
+// what separates something alive from scenery; the shape then separates a
+// person from an animal, and the size separates a vehicle from a crate.
+[[nodiscard]] Kind KindOf(const games::fc3::EntityInfo& entity) noexcept {
+  if (entity.pawn && entity.pawn->army != games::fc3::kNoArmy) {
+    return Kind::Military;
+  }
+
+  // Shape alone is enough to box something person-sized. Requiring the pawn
+  // record here would drop every civilian whose fields did not read, which is
+  // how they ended up as dots.
+  if (entity.humanoid) {
+    return Kind::Civilian;
+  }
+  if (entity.pawn) {
+    return Kind::Animal;
+  }
+
+  return entity.box.Extent().Length() >= kVehicleMinSpan ? Kind::Vehicle
+                                                         : Kind::Prop;
+}
+
+[[nodiscard]] ImU32 ColourOf(const games::fc3::EntityInfo& entity,
+                             Kind kind) noexcept {
+  if (entity.pawn && entity.pawn->dead) {
+    return kDeadColour;
+  }
+
+  switch (kind) {
+    case Kind::Military:
+      if (!entity.pawn) {
+        return kHumanoidColour;
+      }
+
+      return kArmyColours.at(static_cast<std::size_t>(entity.pawn->army) %
+                             kArmyColours.size());
+    case Kind::Civilian:
+      return kCivilianColour;
+    case Kind::Animal:
+      return kAnimalColour;
+    case Kind::Vehicle:
+      return kVehicleColour;
+    case Kind::Prop:
+    default:
+      return kPropColour;
+  }
+}
+
+void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
+             const ImVec2& display, ImU32 colour, float thickness) {
   const std::optional<ScreenRect> kRect{
       ProjectBox(entity, projection, display)};
   if (!kRect) {
     return;
   }
 
-  ImU32 colour{kHumanoidColour};
-  if (entity.pawn) {
-    colour = entity.pawn->dead
-                 ? kDeadColour
-                 : kArmyColours.at(static_cast<std::size_t>(entity.pawn->army) %
-                                   kArmyColours.size());
-  }
-  const ImU32 kColour{colour};
-
   ImGui::GetBackgroundDrawList()->AddRect(ImVec2{kRect->left, kRect->top},
                                           ImVec2{kRect->right, kRect->bottom},
-                                          kColour, 0.0F, 0, kBoxThickness);
+                                          colour, 0.0F, 0, thickness);
 
   std::array<char, kLabelChars> label{};
-  std::snprintf(label.data(), label.size(), "%llX h%.1f %s%d",
+  std::snprintf(label.data(), label.size(), "%llX h%.1f a%d",
                 static_cast<std::uint64_t>(entity.vtable),
                 static_cast<double>(entity.box.Extent().z),
-                entity.pawn ? "a" : "shape a",
                 entity.pawn ? entity.pawn->army : 0);
   ImGui::GetBackgroundDrawList()->AddText(
-      ImVec2{kRect->left, kRect->top - kLabelLift}, kColour, label.data());
+      ImVec2{kRect->left, kRect->top - kLabelLift}, colour, label.data());
 }
 
 void DrawEntities(const Vec3& eye, const Matrix4& projection,
@@ -226,8 +286,12 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
       continue;
     }
 
-    if (kEntity.humanoid) {
-      DrawPawn(kEntity, projection, display);
+    const Kind kKind{KindOf(kEntity)};
+    const ImU32 kColour{ColourOf(kEntity, kKind)};
+
+    if (kKind != Kind::Prop) {
+      DrawBox(kEntity, projection, display, kColour,
+              kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
       continue;
     }
 
@@ -235,7 +299,7 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
         projection, kEntity.transform.Translation(), display.x, display.y)};
     if (kPoint) {
       ImGui::GetBackgroundDrawList()->AddCircleFilled(
-          ImVec2{kPoint->x, kPoint->y}, kPropRadius, kPropColour);
+          ImVec2{kPoint->x, kPoint->y}, kPropRadius, kColour);
     }
   }
 }
@@ -290,6 +354,7 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
   const games::fc3::PawnInfo& kPawn{*nearest->pawn};
   ImGui::Text("%-14s %d  faction %d  dead %u", "army", kPawn.army,
               kPawn.faction, kPawn.deadByte);
+  ImGui::Text("%-14s %08X", "agent type", kPawn.agentType);
   ImGui::Text("%-14s own %02X  hostile %02X  reverse %02X", "masks",
               kPawn.ownArmyBit, kPawn.hostileMask, kPawn.reverseHostileMask);
 }
@@ -402,6 +467,20 @@ void DrawMarker(const std::optional<ScreenPoint>& point, ImU32 colour) {
                                                   kMarkerRadius, colour);
 }
 
+void DrawCrosshair(const std::optional<ScreenPoint>& point, ImU32 colour) {
+  if (!point) {
+    return;
+  }
+
+  ImDrawList* list{ImGui::GetBackgroundDrawList()};
+  list->AddLine(ImVec2{point->x - kCrosshairArm, point->y},
+                ImVec2{point->x + kCrosshairArm, point->y}, colour,
+                kCrosshairThickness);
+  list->AddLine(ImVec2{point->x, point->y - kCrosshairArm},
+                ImVec2{point->x, point->y + kCrosshairArm}, colour,
+                kCrosshairThickness);
+}
+
 }  // namespace
 
 void DrawFrame() noexcept {
@@ -452,7 +531,7 @@ void DrawFrame() noexcept {
 
   DrawEntities(kEye, kViewProjection, kDisplay);
 
-  DrawMarker(kMarkers.ahead, kAheadColour);
+  DrawCrosshair(kMarkers.ahead, kAheadColour);
   DrawMarker(kMarkers.probe, kRightColour);
 }
 

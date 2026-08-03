@@ -4,6 +4,7 @@
 #include <afw/app/detour_guard.hpp>
 #include <afw/app/log.hpp>
 #include <afw/app/scoped_hooks.hpp>
+#include <afw/config/config.hpp>
 #include <afw/esp/esp.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/hook/vmt_hook.hpp>
@@ -23,14 +24,16 @@ namespace {
 constexpr std::size_t kMessageChars{256};
 constexpr std::uint64_t kStatusInterval{1800};
 
-void AFW_ENGINE_CALL RunAllGroupDetour(void* self, void* /*unused*/) {
+void AFW_ENGINE_CALL RunAllGroupDetour(void* scheduler) {
   const app::DetourGuard kInside{};
 
-  games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(self));
+  if (config::Current().espEnabled) {
+    games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(scheduler));
+  }
 
   games::fc3::RunAllGroupFn original{games::fc3::OriginalRunAllGroup()};
   if (original != nullptr) {
-    original(self, nullptr);
+    original(scheduler);
   }
 }
 
