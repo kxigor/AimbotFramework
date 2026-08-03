@@ -60,6 +60,11 @@ struct ClassCacheState {
   return cache;
 }
 
+[[nodiscard]] ClassCacheState& SimpleAnimalAgentCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
+}
+
 [[nodiscard]] std::optional<std::uint32_t> OwnHash(
     std::uintptr_t classDef) noexcept {
   const std::expected<std::uint32_t, std::error_code> kAncestors{
@@ -249,12 +254,19 @@ struct ClassCacheState {
   if (IsOfClass(agent, kVehicleAgentClassDef, VehicleAgentCache())) {
     return AgentKind::Vehicle;
   }
+  if (IsOfClass(agent, kSimpleAnimalAgentClassDef, SimpleAnimalAgentCache())) {
+    return AgentKind::SimpleAnimal;
+  }
 
   return std::nullopt;
 }
 
 [[nodiscard]] std::optional<PawnInfo> ReadAgent(std::uintptr_t agent,
                                                 AgentKind kind) noexcept {
+  if (kind == AgentKind::SimpleAnimal) {
+    return PawnInfo{.kind = kind};
+  }
+
   const std::uintptr_t kBlock{agent + (kind == AgentKind::Animal
                                            ? kAnimalAgentArmyBlock
                                            : kPawnAgentArmyBlock)};

@@ -267,6 +267,9 @@ enum class Kind : std::uint8_t {
   if (pawn.kind == games::fc3::AgentKind::Vehicle) {
     return Kind::Vehicle;
   }
+  if (pawn.kind == games::fc3::AgentKind::SimpleAnimal) {
+    return Kind::Animal;
+  }
   if (pawn.kind == games::fc3::AgentKind::Animal) {
     return (self != nullptr && ArmiesHostile(*self, pawn)) ? Kind::Predator
                                                            : Kind::Animal;

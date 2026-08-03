@@ -71,7 +71,7 @@ constexpr std::int32_t kFactionPrivateer{3};
 // Which agent drives the entity. Siblings in the registry, and the engine's own
 // discriminator: CastToCPawnAgent fails on an animal and CastToCAnimalAgentFC3
 // fails on a human.
-enum class AgentKind : std::uint8_t { Pawn, Animal, Vehicle };
+enum class AgentKind : std::uint8_t { Pawn, Animal, SimpleAnimal, Vehicle };
 
 struct PawnInfo {
   AgentKind kind{AgentKind::Pawn};

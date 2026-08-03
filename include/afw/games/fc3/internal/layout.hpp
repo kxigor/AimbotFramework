@@ -145,6 +145,11 @@ constexpr std::uintptr_t kAgentType{0x294};
 constexpr std::uintptr_t kPawnAgentClassDef{0x11E8B36C};
 constexpr std::uintptr_t kAnimalAgentClassDef{0x11E8B3D0};
 constexpr std::uintptr_t kVehicleAgentClassDef{0x11E8B4BC};
+
+// Birds. Registered against CAgent rather than CGameAgent, so it is not a
+// sibling of the three above and carries none of their layout -- the army block
+// must not be read off it.
+constexpr std::uintptr_t kSimpleAnimalAgentClassDef{0x11E8B49C};
 constexpr std::uintptr_t kPawnOwnArmyBit{0x280};
 constexpr std::uintptr_t kPawnHostileMask{0x281};
 constexpr std::uintptr_t kPawnReverseHostile{0x283};
