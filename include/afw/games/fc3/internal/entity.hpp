@@ -43,6 +43,11 @@ struct RawEntity {
 // offsets need: they are fields on that class and rubbish anywhere else.
 [[nodiscard]] bool IsPawnClass(std::uintptr_t address) noexcept;
 
+// ReadPawn reaches the agent through CEntity__GetCAIComponent. Off the game
+// there is no such function to call, so it falls back to taking the first
+// component that carries an agent pointer -- which is what the fixtures build,
+// and the only way any of this is testable without the engine.
+
 // Walks a component back to its entity. What comes back is confirmed to be an
 // entity before it is handed out.
 [[nodiscard]] std::optional<std::uintptr_t> OwnerOfComponent(

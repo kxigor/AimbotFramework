@@ -23,6 +23,7 @@ namespace {
 }
 
 using DescriptorFn = void*(AFW_ENGINE_CALL*)(void* self);
+using AiComponentFn = void*(AFW_ENGINE_CALL*)(void* self);
 
 struct ClassVerdict {
   std::uintptr_t vtable{};
@@ -55,11 +56,6 @@ struct ClassCacheState {
 }
 
 [[nodiscard]] ClassCacheState& VehicleAgentCache() noexcept {
-  static ClassCacheState cache{};
-  return cache;
-}
-
-[[nodiscard]] ClassCacheState& AiComponentCache() noexcept {
   static ClassCacheState cache{};
   return cache;
 }
@@ -188,7 +184,7 @@ struct ClassCacheState {
   return *kVerdict;
 }
 
-[[nodiscard]] std::optional<std::uintptr_t> FindAgent(
+[[nodiscard]] std::optional<std::uintptr_t> AgentFromComponents(
     std::uintptr_t address) noexcept {
   const std::expected<std::uintptr_t, std::error_code> kArray{
       process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
@@ -206,10 +202,6 @@ struct ClassCacheState {
       continue;
     }
 
-    if (!IsOfClass(*kComponent, kAiComponentClassDef, AiComponentCache())) {
-      continue;
-    }
-
     const std::expected<std::uintptr_t, std::error_code> kAgent{
         process::ReadPointerAs<EnginePtr>(*kComponent + kComponentAgent)};
     if (kAgent && *kAgent != 0) {
@@ -218,6 +210,32 @@ struct ClassCacheState {
   }
 
   return std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::uintptr_t> FindAgent(
+    std::uintptr_t address) noexcept {
+  const std::uintptr_t kAccessor{Resolve(kGetAiComponent)};
+  if (kAccessor == 0) {
+    return AgentFromComponents(address);
+  }
+  if (!IsEntityClass(address)) {
+    return std::nullopt;
+  }
+
+  const AiComponentFn kGetComponent{std::bit_cast<AiComponentFn>(kAccessor)};
+  const void* const kComponent{kGetComponent(std::bit_cast<void*>(address))};
+  if (kComponent == nullptr) {
+    return std::nullopt;
+  }
+
+  const std::expected<std::uintptr_t, std::error_code> kAgent{
+      process::ReadPointerAs<EnginePtr>(
+          std::bit_cast<std::uintptr_t>(kComponent) + kComponentAgent)};
+  if (!kAgent || *kAgent == 0) {
+    return std::nullopt;
+  }
+
+  return *kAgent;
 }
 
 [[nodiscard]] std::optional<AgentKind> AgentClassOf(

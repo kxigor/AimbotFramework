@@ -365,9 +365,7 @@ void DrawRing(const games::fc3::EntityInfo& entity, const Matrix4& projection,
 
   const ImVec2 kCentre{(kRect->left + kRect->right) * kHalfF,
                        (kRect->top + kRect->bottom) * kHalfF};
-  const float kRadius{
-      std::max(kRect->right - kRect->left, kRect->bottom - kRect->top) *
-      kHalfF};
+  const float kRadius{(kRect->bottom - kRect->top) * kHalfF};
   ImGui::GetBackgroundDrawList()->AddCircle(kCentre, kRadius, colour, 0,
                                             kBoxThickness);
   DrawLabel(entity, *kRect, colour);

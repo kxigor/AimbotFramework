@@ -120,11 +120,14 @@ constexpr std::uintptr_t kPawnClassDef{0x11E15440};
 constexpr std::uintptr_t kPawnIsDead{0x258};
 
 // An entity reaches its agent through its CAIComponent, whose +0x14 holds it.
-// The component's class has to be asked of the registry: measured live, +0x10
-// holds a pointer on some components and a float on others, so nothing there
-// caches the class.
+// Finding that component is the engine's job, not ours:
+// CEntity__GetCAIComponent takes only `this`, so calling it is safe, whereas
+// scanning the component array ourselves means calling virtual slot 1 on
+// objects whose class is still unknown -- and that crashed the game inside a
+// four-argument function that dereferenced the stack garbage it got instead of
+// an argument.
 constexpr std::uintptr_t kComponentAgent{0x14};
-constexpr std::uintptr_t kAiComponentClassDef{0x11E1417C};
+constexpr std::uintptr_t kGetAiComponent{0x101C7E37};
 
 // The army block is one four-byte struct -- own bit, hostile mask, alliance
 // mask, reverse-hostile mask -- and the engine passes a pawn's and an animal's
