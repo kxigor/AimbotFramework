@@ -39,13 +39,18 @@ struct RawEntity {
 // call is never made outside the game.
 [[nodiscard]] bool IsEntityClass(std::uintptr_t address) noexcept;
 
-// Most of what an update group holds is components rather than entities, so
-// rejecting a foreign class loses the entity behind it -- which is why animals
-// and a share of the civilians never appeared. This walks the link back. The
-// address it returns is confirmed to be an entity before it is handed out, so
-// a pointer read out of an object that is not a component at all fails here
-// rather than downstream.
+// The same question asked of CBasePawnEntity instead, and the gate the pawn
+// offsets need: they are fields on that class and rubbish anywhere else.
+[[nodiscard]] bool IsPawnClass(std::uintptr_t address) noexcept;
+
+// Walks a component back to its entity. What comes back is confirmed to be an
+// entity before it is handed out.
 [[nodiscard]] std::optional<std::uintptr_t> OwnerOfComponent(
+    std::uintptr_t address) noexcept;
+
+// Absent when the entity carries no identity component, which is the honest
+// answer rather than a guess: nothing downstream should fall back to shape.
+[[nodiscard]] std::optional<EntityIdentity> ReadIdentity(
     std::uintptr_t address) noexcept;
 
 [[nodiscard]] std::expected<RawEntity, std::error_code> ReadEntity(

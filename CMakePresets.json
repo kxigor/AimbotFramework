@@ -22,7 +22,11 @@
       "name": "base-x86",
       "hidden": true,
       "inherits": ["base"],
-      "description": "Everything the 32-bit presets share. Run them from an MSYS2 MINGW32 shell: no toolchain paths are pinned, so CMake picks up both the compiler and the 32-bit GTest from PATH. AFW_TARGET_POINTER_SIZE makes a wrong shell a configure error instead of a silent 64-bit build. The lint gate stays off because clang-format and clang-tidy do not depend on the target architecture, and the 64-bit presets already run them.",
+      "description": "Everything the 32-bit presets share. The MINGW32 toolchain goes on PATH here rather than being left to the shell: started from a UCRT64 prompt the link step picks up the wrong runtime and dies with a bare 'FAILED: [code=1]' carrying no diagnostic at all. AFW_TARGET_POINTER_SIZE makes a wrong toolchain a configure error instead of a silent 64-bit build. The lint gate stays off because clang-format and clang-tidy do not depend on the target architecture, and the 64-bit presets already run them.",
+      "environment": {
+        "PATH": "C:/msys64/mingw32/bin;$penv{PATH}",
+        "MSYSTEM": "MINGW32"
+      },
       "cacheVariables": {
         "SANITIZER_MODE": "None",
         "AFW_TARGET_POINTER_SIZE": "4",

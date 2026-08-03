@@ -22,17 +22,23 @@ constexpr std::uintptr_t kMaxModuleSpan{0x4000000};
 
 // One entry per distinct class seen, so the engine is asked once per class
 // rather than once per object.
-constexpr std::size_t kClassCacheSlots{64};
+constexpr std::size_t kClassCacheSlots{256};
 
-// 0 Blue, 1 Red, 2 Grey, 3 Neutral, 4 Green, 5 Yellow.
+// The names come from the enum CBasePawnEntity_RegisterProperties at 0x10bdcac2
+// registers alongside the field: BlueGuys, RedGuys, GreyGuys, NeutralGuys,
+// GreenGuys, YellowGuys.
 constexpr std::int32_t kMaxArmy{5};
+
+constexpr std::uint32_t kMaxAgentType{3};
 // 0 Unknown, 1 Rebel, 2 Pirate, 3 Privateer.
 constexpr std::int32_t kMaxFaction{3};
+// A live civilian read -2 here, so the range starts below zero.
+constexpr std::int32_t kNoFaction{-2};
 
-// The mask a pawn carries when it belongs to no army at all; kNoArmy, its
-// counterpart, sits next to PawnInfo because it is a field value rather than a
-// bound.
-constexpr std::uint8_t kNoArmyBit{0xFF};
+// What the identity component holds before an archetype is assigned. Seeded
+// from g_DefaultEntityClassHash by the constructor at 0x1018c32e, and a
+// character keeps it, so a record carrying this value says nothing at all.
+constexpr std::uint32_t kNoArchetype{0xFFFFFFFF};
 
 // Loose on purpose: the engine stores already normalised vectors, and garbage
 // misses by orders rather than by hundredths.

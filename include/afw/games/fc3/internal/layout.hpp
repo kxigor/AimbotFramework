@@ -72,15 +72,18 @@ constexpr std::uintptr_t kEntityTransform{0x20};
 constexpr std::uintptr_t kEntityComponentArray{0x88};
 constexpr std::uintptr_t kEntityComponentCount{0x8C};
 
-// CEntityUpdaterManager::AddEntityToUpdate at 0x107c5d96 queues an entity and
-// then every component of its +0x88 array, so an update group holds both side
-// by side and most of what it holds is components. A component does not point
-// at its entity directly: +0x04 is a handle shared by all components of the
-// same entity, and the entity sits at +0x0C of that handle. Verified live in
-// both directions on two unrelated entities -- from 0x53D5D400 out through its
-// component array and back, and the same for 0x53D5E060.
+// An update group holds components as well as entities: AddEntityToUpdate at
+// 0x107c5d96 queues both. A component reaches its entity through a handle at
+// +0x04, then +0x0C of that handle.
 constexpr std::uintptr_t kComponentOwnerHandle{0x04};
 constexpr std::uintptr_t kHandleEntity{0x0C};
+
+// Archetype identity, named by the constructor at 0x1018c32e. Both fields read
+// -1 on a character, so they identify placed objects only. A Ghidra address:
+// module-relative, so it survives a restart.
+constexpr std::uintptr_t kIdentityComponentVtable{0x114ED1A0};
+constexpr std::uintptr_t kIdentityClassIndex{0x20};
+constexpr std::uintptr_t kIdentityClassHash{0x24};
 
 // Byte offset, confirmed at 0x11336d60 (ADD EDI,0x100); the decompiler renders
 // it as +0x40 because it is pointer arithmetic on the component type. Which
@@ -97,13 +100,56 @@ constexpr std::uintptr_t kEntityAabb{0x6C};
 // CEntity keeps its own liveness flag well before the pawn fields start.
 constexpr std::uintptr_t kEntityIsAlive{0x9A};
 
+// The offsets below are fields only on a CBasePawnEntity, registered by
+// GetCBasePawnEntityClassDef at 0x1010e11b. Anywhere else they land inside
+// neighbouring pointers, so ask the registry before reading them.
+//
+// Every one of them is named by CBasePawnEntity_RegisterProperties at
+// 0x10bdcac2, which registers "IsDead" at 600, "selArmy" at 0x284,
+// "selFaction" at 0x290 and "selPawnAgentType" at 0x294. The mask at +0x280 is
+// filled by OnPostLoad_InitArmyMasks, and that registrar attaches it as a
+// post-load callback -- so a pawn spawned rather than placed on the map never
+// runs it, and ownArmyBit == 1 << army holds for map-placed pawns only. It is
+// not a test of whether a pawn is real.
+constexpr std::uintptr_t kPawnClassDef{0x11E15440};
+
+// Only IsDead is a field of the entity. selArmy, selFaction and
+// selPawnAgentType are registered against a nested "CPawnAgent" group, so they
+// are offsets into the AGENT, and reading them off the entity is what left a
+// world of 214 entities with two pawn records.
 constexpr std::uintptr_t kPawnIsDead{0x258};
+
+// An entity reaches its agent through its CAIComponent, whose +0x14 holds it.
+// The component's class has to be asked of the registry: measured live, +0x10
+// holds a pointer on some components and a float on others, so nothing there
+// caches the class.
+constexpr std::uintptr_t kComponentAgent{0x14};
+constexpr std::uintptr_t kAiComponentClassDef{0x11E1417C};
+
+// The army block is one four-byte struct -- own bit, hostile mask, alliance
+// mask, reverse-hostile mask -- and the engine passes a pawn's and an animal's
+// to the same predicate. CPawnAgent keeps it at +0x280, CAnimalAgentFC3 at
+// +0x4FE.
+constexpr std::uintptr_t kPawnAgentArmyBlock{0x280};
+constexpr std::uintptr_t kAnimalAgentArmyBlock{0x4FE};
+constexpr std::uintptr_t kArmyBlockHostile{1};
+constexpr std::uintptr_t kArmyBlockReverseHostile{3};
+
+constexpr std::uintptr_t kAgentArmy{0x284};
+constexpr std::uintptr_t kAgentFaction{0x290};
+constexpr std::uintptr_t kAgentType{0x294};
+
+constexpr std::uintptr_t kPawnAgentClassDef{0x11E8B36C};
+constexpr std::uintptr_t kAnimalAgentClassDef{0x11E8B3D0};
+constexpr std::uintptr_t kVehicleAgentClassDef{0x11E8B4BC};
 constexpr std::uintptr_t kPawnOwnArmyBit{0x280};
 constexpr std::uintptr_t kPawnHostileMask{0x281};
 constexpr std::uintptr_t kPawnReverseHostile{0x283};
 constexpr std::uintptr_t kPawnArmy{0x284};
 constexpr std::uintptr_t kPawnFaction{0x290};
-// A hashed name, not a small enum: 0xC940191A was read from a live civilian.
+// enumPawnAgentType: Unknown, Player, Companion, Civilian. An earlier note here
+// called it a hashed name after reading 0xC940191A live, but that was read off
+// an object that was never a pawn, before the class was checked at all.
 constexpr std::uintptr_t kPawnAgentType{0x294};
 
 }  // namespace afw::games::fc3

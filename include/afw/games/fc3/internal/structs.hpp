@@ -49,18 +49,47 @@ constexpr std::size_t kRejectionCount{6};
 // that names it.
 constexpr std::int32_t kNoArmy{-1};
 
-// Present only on an entity that passed the army invariant, so every field here
-// is meaningful whenever the record itself is. army is kNoArmy for anything the
-// engine does not enlist -- civilians and animals both land there.
+// enumPawnAgentType, registered next to the field it describes by
+// CBasePawnEntity_RegisterProperties at 0x10bdcac2. The engine saying what a
+// character is, so none of it has to be guessed from the shape of a box.
+constexpr std::uint32_t kAgentUnknown{0};
+constexpr std::uint32_t kAgentPlayer{1};
+constexpr std::uint32_t kAgentCompanion{2};
+constexpr std::uint32_t kAgentCivilian{3};
+
+// enumFaction, from the same registrar. Worth more than the army masks for
+// deciding sides: the masks are filled by a post-load callback a spawned pawn
+// never runs, so the player's own are zero and every mask comparison against
+// them answers "not hostile".
+constexpr std::int32_t kFactionUnknown{0};
+constexpr std::int32_t kFactionRebel{1};
+constexpr std::int32_t kFactionPirate{2};
+constexpr std::int32_t kFactionPrivateer{3};
+
+// Only meaningful on a CBasePawnEntity, which ReadPawn confirms with the
+// registry first. army is kNoArmy for anything the engine does not enlist.
+// Which agent drives the entity. Siblings in the registry, and the engine's own
+// discriminator: CastToCPawnAgent fails on an animal and CastToCAnimalAgentFC3
+// fails on a human.
+enum class AgentKind : std::uint8_t { Pawn, Animal, Vehicle };
+
 struct PawnInfo {
-  std::int32_t army{};
-  std::int32_t faction{};
+  AgentKind kind{AgentKind::Pawn};
+  std::int32_t army{kNoArmy};
+  std::int32_t faction{kFactionUnknown};
   std::uint32_t agentType{};
   std::uint8_t ownArmyBit{};
   std::uint8_t hostileMask{};
   std::uint8_t reverseHostileMask{};
   std::uint8_t deadByte{};
   bool dead{};
+};
+
+// Archetype identity. The vtable cannot stand in for it: a car and a pirate
+// share one.
+struct EntityIdentity {
+  std::uint32_t classIndex{};
+  std::uint32_t classHash{};
 };
 
 struct EntityInfo {
@@ -71,6 +100,7 @@ struct EntityInfo {
   Matrix4 transform{};
   Aabb box{};
   std::optional<PawnInfo> pawn;
+  std::optional<EntityIdentity> identity;
   bool humanoid{};
 };
 

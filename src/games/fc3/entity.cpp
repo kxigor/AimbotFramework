@@ -29,15 +29,39 @@ struct ClassVerdict {
   bool isEntity{};
 };
 
-[[nodiscard]] std::array<ClassVerdict, kClassCacheSlots>&
-ClassCache() noexcept {
-  static std::array<ClassVerdict, kClassCacheSlots> cache{};
+struct ClassCacheState {
+  std::array<ClassVerdict, kClassCacheSlots> slots{};
+  std::uint32_t used{};
+};
+
+[[nodiscard]] ClassCacheState& EntityCache() noexcept {
+  static ClassCacheState cache{};
   return cache;
 }
 
-[[nodiscard]] std::uint32_t& CachedClasses() noexcept {
-  static std::uint32_t used{0};
-  return used;
+[[nodiscard]] ClassCacheState& PawnCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
+}
+
+[[nodiscard]] ClassCacheState& PawnAgentCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
+}
+
+[[nodiscard]] ClassCacheState& AnimalAgentCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
+}
+
+[[nodiscard]] ClassCacheState& VehicleAgentCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
+}
+
+[[nodiscard]] ClassCacheState& AiComponentCache() noexcept {
+  static ClassCacheState cache{};
+  return cache;
 }
 
 [[nodiscard]] std::optional<std::uint32_t> OwnHash(
@@ -79,16 +103,17 @@ ClassCache() noexcept {
   return false;
 }
 
-[[nodiscard]] std::optional<bool> AskTheEngine(std::uintptr_t address,
-                                               std::uintptr_t vtable) noexcept {
+[[nodiscard]] std::optional<bool> AskTheEngine(
+    std::uintptr_t address, std::uintptr_t vtable,
+    std::uintptr_t classDef) noexcept {
   const std::uintptr_t kBase{Resolve(kGhidraImageBase)};
   if (kBase == 0) {
     return std::nullopt;
   }
 
-  const std::optional<std::uint32_t> kWanted{OwnHash(Resolve(kEntityClassDef))};
+  const std::optional<std::uint32_t> kWanted{OwnHash(Resolve(classDef))};
   if (!kWanted) {
-    return std::nullopt;
+    return false;
   }
 
   if (vtable < kBase || vtable >= kBase + kMaxModuleSpan) {
@@ -123,17 +148,134 @@ ClassCache() noexcept {
   return process::ReadAt<Matrix4>(address + kEntityTransform);
 }
 
-[[nodiscard]] bool IsConsistentArmy(std::int32_t army,
-                                    std::uint8_t ownBit) noexcept {
-  if (army == kNoArmy) {
-    return ownBit == kNoArmyBit;
-  }
-  if (army < 0 || army > kMaxArmy) {
+[[nodiscard]] bool IsPlausibleArmy(std::int32_t army) noexcept {
+  return army == kNoArmy || (army >= 0 && army <= kMaxArmy);
+}
+
+[[nodiscard]] bool IsPlausibleFaction(std::int32_t faction) noexcept {
+  return faction >= kNoFaction && faction <= kMaxFaction;
+}
+
+[[nodiscard]] bool IsPlausibleAgentType(std::uint32_t agentType) noexcept {
+  return agentType <= kMaxAgentType;
+}
+
+[[nodiscard]] bool IsOfClass(std::uintptr_t address, std::uintptr_t classDef,
+                             ClassCacheState& cache) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kVtable{
+      process::ReadPointerAs<EnginePtr>(address)};
+  if (!kVtable || *kVtable == 0) {
     return false;
   }
 
-  return static_cast<std::uint32_t>(ownBit) ==
-         (1U << static_cast<std::uint32_t>(army));
+  for (std::uint32_t index{0}; index < cache.used; ++index) {
+    if (cache.slots.at(index).vtable == *kVtable) {
+      return cache.slots.at(index).isEntity;
+    }
+  }
+
+  const std::optional<bool> kVerdict{AskTheEngine(address, *kVtable, classDef)};
+  if (!kVerdict) {
+    return true;
+  }
+
+  if (cache.used < kClassCacheSlots) {
+    cache.slots.at(cache.used) =
+        ClassVerdict{.vtable = *kVtable, .isEntity = *kVerdict};
+    ++cache.used;
+  }
+
+  return *kVerdict;
+}
+
+[[nodiscard]] std::optional<std::uintptr_t> FindAgent(
+    std::uintptr_t address) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kArray{
+      process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(address + kEntityComponentCount)};
+  if (!kArray || !kCount || *kArray == 0 || *kCount > kMaxComponents) {
+    return std::nullopt;
+  }
+
+  for (std::uint32_t index{0}; index < *kCount; ++index) {
+    const std::expected<std::uintptr_t, std::error_code> kComponent{
+        process::ReadPointerAs<EnginePtr>(*kArray +
+                                          (index * sizeof(EnginePtr)))};
+    if (!kComponent || *kComponent == 0) {
+      continue;
+    }
+
+    if (!IsOfClass(*kComponent, kAiComponentClassDef, AiComponentCache())) {
+      continue;
+    }
+
+    const std::expected<std::uintptr_t, std::error_code> kAgent{
+        process::ReadPointerAs<EnginePtr>(*kComponent + kComponentAgent)};
+    if (kAgent && *kAgent != 0) {
+      return *kAgent;
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<AgentKind> AgentClassOf(
+    std::uintptr_t agent) noexcept {
+  if (IsOfClass(agent, kPawnAgentClassDef, PawnAgentCache())) {
+    return AgentKind::Pawn;
+  }
+  if (IsOfClass(agent, kAnimalAgentClassDef, AnimalAgentCache())) {
+    return AgentKind::Animal;
+  }
+  if (IsOfClass(agent, kVehicleAgentClassDef, VehicleAgentCache())) {
+    return AgentKind::Vehicle;
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<PawnInfo> ReadAgent(std::uintptr_t agent,
+                                                AgentKind kind) noexcept {
+  const std::uintptr_t kBlock{agent + (kind == AgentKind::Animal
+                                           ? kAnimalAgentArmyBlock
+                                           : kPawnAgentArmyBlock)};
+  const std::expected<std::uint8_t, std::error_code> kOwnBit{
+      process::ReadAt<std::uint8_t>(kBlock)};
+  if (!kOwnBit) {
+    return std::nullopt;
+  }
+
+  PawnInfo pawn{};
+  pawn.kind = kind;
+  pawn.ownArmyBit = *kOwnBit;
+  pawn.hostileMask =
+      process::ReadAt<std::uint8_t>(kBlock + kArmyBlockHostile).value_or(0);
+  pawn.reverseHostileMask =
+      process::ReadAt<std::uint8_t>(kBlock + kArmyBlockReverseHostile)
+          .value_or(0);
+
+  if (kind != AgentKind::Pawn) {
+    return pawn;
+  }
+
+  const std::expected<std::int32_t, std::error_code> kArmy{
+      process::ReadAt<std::int32_t>(agent + kAgentArmy)};
+  const std::expected<std::int32_t, std::error_code> kFaction{
+      process::ReadAt<std::int32_t>(agent + kAgentFaction)};
+  const std::expected<std::uint32_t, std::error_code> kType{
+      process::ReadAt<std::uint32_t>(agent + kAgentType)};
+  if (kArmy && IsPlausibleArmy(*kArmy)) {
+    pawn.army = *kArmy;
+  }
+  if (kFaction && IsPlausibleFaction(*kFaction)) {
+    pawn.faction = *kFaction;
+  }
+  if (kType && IsPlausibleAgentType(*kType)) {
+    pawn.agentType = *kType;
+  }
+
+  return pawn;
 }
 
 [[nodiscard]] bool IsHumanoid(const Aabb& box) noexcept {
@@ -146,31 +288,53 @@ ClassCache() noexcept {
 }  // namespace
 
 bool IsEntityClass(std::uintptr_t address) noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kVtable{
-      process::ReadPointerAs<EnginePtr>(address)};
-  if (!kVtable || *kVtable == 0) {
-    return false;
+  return IsOfClass(address, kEntityClassDef, EntityCache());
+}
+
+bool IsPawnClass(std::uintptr_t address) noexcept {
+  return IsOfClass(address, kPawnClassDef, PawnCache());
+}
+
+std::optional<EntityIdentity> ReadIdentity(std::uintptr_t address) noexcept {
+  const std::uintptr_t kWanted{Resolve(kIdentityComponentVtable)};
+  if (kWanted == 0) {
+    return std::nullopt;
   }
 
-  std::array<ClassVerdict, kClassCacheSlots>& cache{ClassCache()};
-  for (std::uint32_t index{0}; index < CachedClasses(); ++index) {
-    if (cache.at(index).vtable == *kVtable) {
-      return cache.at(index).isEntity;
+  const std::expected<std::uintptr_t, std::error_code> kArray{
+      process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(address + kEntityComponentCount)};
+  if (!kArray || !kCount || *kArray == 0 || *kCount > kMaxComponents) {
+    return std::nullopt;
+  }
+
+  for (std::uint32_t index{0}; index < *kCount; ++index) {
+    const std::expected<std::uintptr_t, std::error_code> kComponent{
+        process::ReadPointerAs<EnginePtr>(*kArray +
+                                          (index * sizeof(EnginePtr)))};
+    if (!kComponent || *kComponent == 0) {
+      continue;
     }
+
+    const std::expected<std::uintptr_t, std::error_code> kVtable{
+        process::ReadPointerAs<EnginePtr>(*kComponent)};
+    if (!kVtable || *kVtable != kWanted) {
+      continue;
+    }
+
+    const std::expected<std::uint32_t, std::error_code> kClassIndex{
+        process::ReadAt<std::uint32_t>(*kComponent + kIdentityClassIndex)};
+    const std::expected<std::uint32_t, std::error_code> kClassHash{
+        process::ReadAt<std::uint32_t>(*kComponent + kIdentityClassHash)};
+    if (!kClassIndex || !kClassHash || *kClassHash == kNoArchetype) {
+      return std::nullopt;
+    }
+
+    return EntityIdentity{.classIndex = *kClassIndex, .classHash = *kClassHash};
   }
 
-  const std::optional<bool> kVerdict{AskTheEngine(address, *kVtable)};
-  if (!kVerdict) {
-    return true;
-  }
-
-  if (CachedClasses() < kClassCacheSlots) {
-    cache.at(CachedClasses()) =
-        ClassVerdict{.vtable = *kVtable, .isEntity = *kVerdict};
-    ++CachedClasses();
-  }
-
-  return *kVerdict;
+  return std::nullopt;
 }
 
 std::optional<std::uintptr_t> OwnerOfComponent(
@@ -278,39 +442,28 @@ std::expected<EntityInfo, Rejection> Classify(const RawEntity& raw) noexcept {
 }
 
 std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept {
-  const std::expected<std::int32_t, std::error_code> kArmy{
-      process::ReadAt<std::int32_t>(address + kPawnArmy)};
-  const std::expected<std::uint8_t, std::error_code> kOwnBit{
-      process::ReadAt<std::uint8_t>(address + kPawnOwnArmyBit)};
-  if (!kArmy || !kOwnBit) {
-    return std::nullopt;
-  }
-  if (!IsConsistentArmy(*kArmy, *kOwnBit)) {
+  const std::optional<std::uintptr_t> kAgent{FindAgent(address)};
+  if (!kAgent) {
     return std::nullopt;
   }
 
-  const std::expected<std::int32_t, std::error_code> kFaction{
-      process::ReadAt<std::int32_t>(address + kPawnFaction)};
-  if (!kFaction) {
+  const std::optional<AgentKind> kKind{AgentClassOf(*kAgent)};
+  if (!kKind) {
     return std::nullopt;
   }
 
-  const std::uint8_t kDead{
-      process::ReadAt<std::uint8_t>(address + kPawnIsDead).value_or(0)};
+  std::optional<PawnInfo> pawn{ReadAgent(*kAgent, *kKind)};
+  if (!pawn) {
+    return std::nullopt;
+  }
 
-  return PawnInfo{
-      .army = *kArmy,
-      .faction = *kFaction,
-      .agentType =
-          process::ReadAt<std::uint32_t>(address + kPawnAgentType).value_or(0),
-      .ownArmyBit = *kOwnBit,
-      .hostileMask =
-          process::ReadAt<std::uint8_t>(address + kPawnHostileMask).value_or(0),
-      .reverseHostileMask =
-          process::ReadAt<std::uint8_t>(address + kPawnReverseHostile)
-              .value_or(0),
-      .deadByte = kDead,
-      .dead = kDead != 0};
+  if (IsPawnClass(address)) {
+    pawn->deadByte =
+        process::ReadAt<std::uint8_t>(address + kPawnIsDead).value_or(0);
+    pawn->dead = pawn->deadByte != 0;
+  }
+
+  return pawn;
 }
 
 }  // namespace afw::games::fc3

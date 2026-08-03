@@ -12,6 +12,10 @@
 #include <optional>
 #include <system_error>
 
+extern "C" {
+__declspec(dllexport) const void* afwSnapshot{nullptr};
+}
+
 namespace afw::games::fc3 {
 
 namespace {
@@ -125,6 +129,7 @@ void AcceptEntity(std::uintptr_t address, EntitySnapshot& snapshot,
   snapshot.CountByType(typeBit, true);
 
   classified->pawn = ReadPawn(address);
+  classified->identity = ReadIdentity(address);
 
   snapshot.items.at(snapshot.count) = *classified;
   ++snapshot.count;
@@ -248,6 +253,7 @@ void PublishCensus() noexcept {
         ReadySlot().exchange(PublishedIndex(), std::memory_order_acq_rel);
   }
 
+  afwSnapshot = &Buffers().at(PublishedIndex()).snapshot;
   ++PublishedFrames();
   GenerationWanted().store(true, std::memory_order_release);
 }

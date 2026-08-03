@@ -4,17 +4,17 @@
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
 #include <array>
+#include <atomic>
 #include <bit>
 #include <cstddef>
 #include <cstdint>
-#include <atomic>
 #include <cstring>
 #include <thread>
 #include <tuple>
 
 namespace {
 
-constexpr SIZE_T kBufferBytes{4096};
+constexpr SIZE_T kBufferBytes{16384};
 
 // The engine's pointers are four bytes wide, so the fake has to live where a
 // 32-bit value can address it. On a 64-bit test run a plain allocation would
@@ -48,9 +48,23 @@ constexpr std::uint32_t kEntityTwo{0x800};
 
 constexpr std::uint32_t kEntityTransform{0x20};
 constexpr std::uint32_t kEntityAabb{0x6C};
+
+// The army fields belong to the agent, not the entity: the property registrar
+// puts them in a nested CPawnAgent group. Reaching them takes the same walk the
+// engine does -- the component whose cached class hash is CAIComponent's, then
+// its +0x14.
+constexpr std::uint32_t kEntityComponentArray{0x88};
+constexpr std::uint32_t kEntityComponentCount{0x8C};
+constexpr std::uint32_t kComponentAgent{0x14};
+
+constexpr std::uint32_t kComponentArrayOne{0x1000};
+constexpr std::uint32_t kComponentOne{0x1100};
+constexpr std::uint32_t kAgentOne{0x2000};
+
 constexpr std::uint32_t kPawnOwnArmyBit{0x280};
 constexpr std::uint32_t kPawnArmy{0x284};
 constexpr std::uint32_t kPawnFaction{0x290};
+constexpr std::uint32_t kPawnAgentType{0x294};
 
 constexpr std::uint32_t kRowBytes{0x10};
 constexpr std::uint32_t kVec3Bytes{0x0C};
@@ -88,6 +102,20 @@ class Fc3CensusUnit : public ::testing::Test {
 
     Poke(kEntityGroupTwo + kEntityGroupArray, At(kEntityArrayTwo));
     Poke(kEntityGroupTwo + kEntityGroupCount, kEntitiesTwo);
+
+    GiveAnAgent(kEntityOne, kComponentArrayOne, kComponentOne, kAgentOne);
+  }
+
+  // Only the first entity gets one, so a test can tell the two apart by whether
+  // a pawn record appeared at all.
+  void GiveAnAgent(std::uint32_t entity, std::uint32_t array,
+                   std::uint32_t component, std::uint32_t agent) {
+    Poke(entity + kEntityComponentArray, At(array));
+    Poke(entity + kEntityComponentCount, 1);
+    Poke(array, At(component));
+    Poke(component, 0xC0FF0000 + component);
+    Poke(component + kComponentAgent, At(agent));
+    Poke(agent, 0xA6E70000 + agent);
   }
 
   void TearDown() override {
@@ -274,15 +302,35 @@ TEST_F(Fc3SnapshotUnit, CarriesThePositionThroughUnchanged) {
       afw::games::fc3::LastSnapshot()};
   ASSERT_EQ(kSnapshot.count, 2U);
 
-  const afw::math::Vec3 kPosition{kSnapshot.items.at(0).transform.Translation()};
+  const afw::math::Vec3 kPosition{
+      kSnapshot.items.at(0).transform.Translation()};
   EXPECT_FLOAT_EQ(kPosition.x, 100.0F);
   EXPECT_FLOAT_EQ(kPosition.y, 200.0F);
 }
 
-TEST_F(Fc3SnapshotUnit, GivesAHumanoidItsPawnRecordWhenTheArmyBitsAgree) {
-  Poke(kEntityOne + kPawnArmy, 2);
-  Poke(kEntityOne + kPawnOwnArmyBit, 1U << 2U);
-  Poke(kEntityOne + kPawnFaction, 1);
+TEST_F(Fc3SnapshotUnit, GivesAHumanoidItsPawnRecordWhenTheFieldsAreInRange) {
+  Poke(kAgentOne + kPawnArmy, 2);
+  Poke(kAgentOne + kPawnFaction, 1);
+  Poke(kAgentOne + kPawnAgentType, 3);
+
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+  ASSERT_TRUE(kSnapshot.items.at(0).pawn.has_value());
+  EXPECT_EQ(kSnapshot.items.at(0).pawn->army, 2);
+  EXPECT_EQ(kSnapshot.items.at(0).pawn->agentType, 3U);
+  EXPECT_EQ(kSnapshot.pawns, 1U);
+}
+
+// ownArmyBit == 1 << army is a real relation, but only for a pawn placed on the
+// map: CBasePawnEntity_RegisterProperties attaches OnPostLoad_InitArmyMasks as
+// a post-load callback, so a spawned pawn never runs it. Gating on it dropped
+// every spawned NPC in the game, which is why it must not decide this.
+TEST_F(Fc3SnapshotUnit, KeepsThePawnRecordWhenTheArmyBitDisagrees) {
+  Poke(kAgentOne + kPawnArmy, 2);
+  Poke(kAgentOne + kPawnOwnArmyBit, 1U);
 
   std::ignore = Walk(At(kScheduler));
 
@@ -294,17 +342,39 @@ TEST_F(Fc3SnapshotUnit, GivesAHumanoidItsPawnRecordWhenTheArmyBitsAgree) {
   EXPECT_EQ(kSnapshot.pawns, 1U);
 }
 
-TEST_F(Fc3SnapshotUnit, WithholdsThePawnRecordWhenTheArmyBitsDisagree) {
-  Poke(kEntityOne + kPawnArmy, 2);
-  Poke(kEntityOne + kPawnOwnArmyBit, 1U);
+// What the record exists for is the agent's class, and that is known before any
+// field is read. A field that reads back nonsense costs that field, not the
+// record: dropping the whole thing is how an entity ended up classified by the
+// size of its bounding box instead.
+TEST_F(Fc3SnapshotUnit, FallsBackOnAFieldRatherThanDroppingTheRecord) {
+  Poke(kAgentOne + kPawnAgentType, 9);
+  Poke(kAgentOne + kPawnArmy, 99);
+  Poke(kAgentOne + kPawnFaction, 77);
 
   std::ignore = Walk(At(kScheduler));
 
   const afw::games::fc3::EntitySnapshot& kSnapshot{
       afw::games::fc3::LastSnapshot()};
   ASSERT_EQ(kSnapshot.count, 2U);
-  EXPECT_FALSE(kSnapshot.items.at(0).pawn.has_value());
-  EXPECT_EQ(kSnapshot.pawns, 0U);
+  ASSERT_TRUE(kSnapshot.items.at(0).pawn.has_value());
+
+  const afw::games::fc3::PawnInfo& kPawn{*kSnapshot.items.at(0).pawn};
+  EXPECT_EQ(kPawn.agentType, afw::games::fc3::kAgentUnknown);
+  EXPECT_EQ(kPawn.army, afw::games::fc3::kNoArmy);
+  EXPECT_EQ(kPawn.faction, afw::games::fc3::kFactionUnknown);
+}
+
+// The second entity is built without an agent at all, so it stands for
+// everything in the world that is scenery: no record, and nothing downstream
+// may invent a kind for it.
+TEST_F(Fc3SnapshotUnit, WithholdsThePawnRecordWhenThereIsNoAgent) {
+  std::ignore = Walk(At(kScheduler));
+
+  const afw::games::fc3::EntitySnapshot& kSnapshot{
+      afw::games::fc3::LastSnapshot()};
+  ASSERT_EQ(kSnapshot.count, 2U);
+  EXPECT_FALSE(kSnapshot.items.at(1).pawn.has_value());
+  EXPECT_EQ(kSnapshot.pawns, 1U);
 }
 
 // The handoff itself: a walk must not change what the reader is looking at

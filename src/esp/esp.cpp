@@ -40,19 +40,17 @@ constexpr ImU32 kAheadColour{0xFF00FF00};
 constexpr ImU32 kRightColour{0xFF0080FF};
 constexpr ImU32 kPropColour{0xC000FF40};
 constexpr ImU32 kDeadColour{0x80606060};
-constexpr ImU32 kHumanoidColour{0xFF00D0FF};
-
-constexpr std::array<ImU32, 6> kArmyColours{0xFFFF6030, 0xFF3030FF, 0xFFA0A0A0,
-                                            0xFFFFFFFF, 0xFF30FF30, 0xFF30FFFF};
+constexpr ImU32 kEnemyColour{0xFF3030FF};
+constexpr ImU32 kAllyColour{0xFF30FF30};
 
 constexpr std::array<const char*, games::fc3::kRejectionCount> kRejectionNames{
     "no vtable",  "not rigid",        "bad box",
     "not finite", "beyond the world", "template spawn"};
 
 constexpr ImU32 kCivilianColour{0xFFA0FFA0};
-constexpr ImU32 kAnimalColour{0xFF5050C0};
+constexpr ImU32 kAnimalColour{0xFF7070A0};
+constexpr ImU32 kPredatorColour{0xFF2060FF};
 constexpr ImU32 kVehicleColour{0xFF40C0FF};
-constexpr float kVehicleMinSpan{2.5F};
 
 constexpr float kDrawDistance{150.0F};
 constexpr float kPropRadius{2.0F};
@@ -62,6 +60,9 @@ constexpr float kLabelLift{14.0F};
 constexpr std::size_t kLabelChars{64};
 constexpr std::size_t kVtableSlots{12};
 constexpr float kAimTolerance{0.95F};
+constexpr std::size_t kNearbyRows{8};
+constexpr float kNearbyRange{25.0F};
+constexpr std::int32_t kNoPawnField{-99};
 constexpr float kPanelWidth{540.0F};
 constexpr float kPanelHeight{1180.0F};
 
@@ -93,9 +94,22 @@ void ShowPoint(const char* label, const std::optional<ScreenPoint>& point) {
               static_cast<double>(point->y));
 }
 
+[[nodiscard]] std::uint32_t CountWithArchetype(
+    const games::fc3::EntitySnapshot& snapshot) noexcept {
+  std::uint32_t found{0};
+  for (std::uint32_t index{0}; index < snapshot.count; ++index) {
+    if (snapshot.items.at(index).identity) {
+      ++found;
+    }
+  }
+
+  return found;
+}
+
 void ShowCensus() {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   ImGui::Text("%-18s %u", "in the world", kSnapshot.count);
+  ImGui::Text("%-18s %u", "with archetype", CountWithArchetype(kSnapshot));
   ImGui::Text("%-18s %u", "over capacity", kSnapshot.dropped);
   ImGui::Text("%-18s %u", "humanoid boxes", kSnapshot.humanoids);
   ImGui::Text("%-18s %u", "pawns", kSnapshot.pawns);
@@ -219,22 +233,71 @@ struct ScreenRect {
   return rect;
 }
 
-enum class Kind : std::uint8_t { Military, Civilian, Animal, Vehicle, Prop };
+enum class Kind : std::uint8_t {
+  Self,
+  Enemy,
+  Ally,
+  Civilian,
+  Predator,
+  Animal,
+  Vehicle,
+  Prop
+};
 
-[[nodiscard]] Kind KindOf(const games::fc3::EntityInfo& entity) noexcept {
-  if (entity.pawn && entity.pawn->army != games::fc3::kNoArmy) {
-    return Kind::Military;
+[[nodiscard]] bool ArmiesHostile(const games::fc3::PawnInfo& self,
+                                 const games::fc3::PawnInfo& other) noexcept {
+  return ((other.ownArmyBit & self.hostileMask) != 0) ||
+         ((other.reverseHostileMask & self.ownArmyBit) != 0);
+}
+
+[[nodiscard]] const games::fc3::PawnInfo* FindSelf(
+    const games::fc3::EntitySnapshot& snapshot) noexcept {
+  for (std::uint32_t index{0}; index < snapshot.count; ++index) {
+    const games::fc3::EntityInfo& kEntity{snapshot.items.at(index)};
+    if (kEntity.pawn && kEntity.pawn->agentType == games::fc3::kAgentPlayer) {
+      return &*kEntity.pawn;
+    }
   }
 
-  if (entity.humanoid) {
+  return nullptr;
+}
+
+[[nodiscard]] Kind KindOfPawn(const games::fc3::PawnInfo& pawn,
+                              const games::fc3::PawnInfo* self) noexcept {
+  if (pawn.kind == games::fc3::AgentKind::Vehicle) {
+    return Kind::Vehicle;
+  }
+  if (pawn.kind == games::fc3::AgentKind::Animal) {
+    return (self != nullptr && ArmiesHostile(*self, pawn)) ? Kind::Predator
+                                                           : Kind::Animal;
+  }
+  if (pawn.agentType == games::fc3::kAgentPlayer) {
+    return Kind::Self;
+  }
+  if (pawn.agentType == games::fc3::kAgentCompanion) {
+    return Kind::Ally;
+  }
+  if (pawn.agentType == games::fc3::kAgentCivilian) {
     return Kind::Civilian;
   }
+  if (pawn.faction == games::fc3::kFactionPirate ||
+      pawn.faction == games::fc3::kFactionPrivateer) {
+    return Kind::Enemy;
+  }
+  if (pawn.faction == games::fc3::kFactionRebel) {
+    return Kind::Ally;
+  }
+  return (self != nullptr && ArmiesHostile(*self, pawn)) ? Kind::Enemy
+                                                         : Kind::Civilian;
+}
+
+[[nodiscard]] Kind KindOf(const games::fc3::EntityInfo& entity,
+                          const games::fc3::PawnInfo* self) noexcept {
   if (entity.pawn) {
-    return Kind::Animal;
+    return KindOfPawn(*entity.pawn, self);
   }
 
-  return entity.box.Extent().Length() >= kVehicleMinSpan ? Kind::Vehicle
-                                                         : Kind::Prop;
+  return Kind::Prop;
 }
 
 [[nodiscard]] ImU32 ColourOf(const games::fc3::EntityInfo& entity,
@@ -244,15 +307,15 @@ enum class Kind : std::uint8_t { Military, Civilian, Animal, Vehicle, Prop };
   }
 
   switch (kind) {
-    case Kind::Military:
-      if (!entity.pawn) {
-        return kHumanoidColour;
-      }
-
-      return kArmyColours.at(static_cast<std::size_t>(entity.pawn->army) %
-                             kArmyColours.size());
+    case Kind::Self:
+    case Kind::Enemy:
+      return kEnemyColour;
+    case Kind::Ally:
+      return kAllyColour;
     case Kind::Civilian:
       return kCivilianColour;
+    case Kind::Predator:
+      return kPredatorColour;
     case Kind::Animal:
       return kAnimalColour;
     case Kind::Vehicle:
@@ -261,6 +324,21 @@ enum class Kind : std::uint8_t { Military, Civilian, Animal, Vehicle, Prop };
     default:
       return kPropColour;
   }
+}
+
+void DrawLabel(const games::fc3::EntityInfo& entity, const ScreenRect& rect,
+               ImU32 colour) {
+  std::array<char, kLabelChars> label{};
+  if (entity.identity) {
+    std::snprintf(label.data(), label.size(), "%08X h%.1f",
+                  entity.identity->classHash,
+                  static_cast<double>(entity.box.Extent().z));
+  } else {
+    std::snprintf(label.data(), label.size(), "-------- h%.1f",
+                  static_cast<double>(entity.box.Extent().z));
+  }
+  ImGui::GetBackgroundDrawList()->AddText(
+      ImVec2{rect.left, rect.top - kLabelLift}, colour, label.data());
 }
 
 void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
@@ -274,19 +352,31 @@ void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
   ImGui::GetBackgroundDrawList()->AddRect(ImVec2{kRect->left, kRect->top},
                                           ImVec2{kRect->right, kRect->bottom},
                                           colour, 0.0F, 0, thickness);
+  DrawLabel(entity, *kRect, colour);
+}
 
-  std::array<char, kLabelChars> label{};
-  std::snprintf(label.data(), label.size(), "%llX h%.1f a%d",
-                static_cast<std::uint64_t>(entity.vtable),
-                static_cast<double>(entity.box.Extent().z),
-                entity.pawn ? entity.pawn->army : 0);
-  ImGui::GetBackgroundDrawList()->AddText(
-      ImVec2{kRect->left, kRect->top - kLabelLift}, colour, label.data());
+void DrawRing(const games::fc3::EntityInfo& entity, const Matrix4& projection,
+              const ImVec2& display, ImU32 colour) {
+  const std::optional<ScreenRect> kRect{
+      ProjectBox(entity, projection, display)};
+  if (!kRect) {
+    return;
+  }
+
+  const ImVec2 kCentre{(kRect->left + kRect->right) * kHalfF,
+                       (kRect->top + kRect->bottom) * kHalfF};
+  const float kRadius{
+      std::max(kRect->right - kRect->left, kRect->bottom - kRect->top) *
+      kHalfF};
+  ImGui::GetBackgroundDrawList()->AddCircle(kCentre, kRadius, colour, 0,
+                                            kBoxThickness);
+  DrawLabel(entity, *kRect, colour);
 }
 
 void DrawEntities(const Vec3& eye, const Matrix4& projection,
                   const ImVec2& display) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
+  const games::fc3::PawnInfo* const kSelf{FindSelf(kSnapshot)};
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
@@ -294,9 +384,17 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
       continue;
     }
 
-    const Kind kKind{KindOf(kEntity)};
+    const Kind kKind{KindOf(kEntity, kSelf)};
+    if (kKind == Kind::Self) {
+      continue;
+    }
+
     const ImU32 kColour{ColourOf(kEntity, kKind)};
 
+    if (kKind == Kind::Animal) {
+      DrawRing(kEntity, projection, display, kColour);
+      continue;
+    }
     if (kKind != Kind::Prop) {
       DrawBox(kEntity, projection, display, kColour,
               kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
@@ -317,12 +415,17 @@ void ShowVector(const char* label, const Vec3& value) {
               static_cast<double>(value.y), static_cast<double>(value.z));
 }
 
-void ShowInspector(const Vec3& eye, const Vec3& forward) {
+struct AimHit {
+  const games::fc3::EntityInfo* entity{nullptr};
+  float distance{0.0F};
+};
+
+[[nodiscard]] AimHit UnderCrosshair(const Vec3& eye,
+                                    const Vec3& forward) noexcept {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
-  const games::fc3::EntityInfo* nearest{nullptr};
+  AimHit hit{};
   float best{kAimTolerance};
-  float bestDistance{0.0F};
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
@@ -336,35 +439,125 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
     const float kDot{kDirection.Dot(forward)};
     if (kDot > best) {
       best = kDot;
-      nearest = &kEntity;
-      bestDistance = kDistance;
+      hit = AimHit{.entity = &kEntity, .distance = kDistance};
     }
   }
 
+  return hit;
+}
+
+struct NearbyRow {
+  const games::fc3::EntityInfo* entity{nullptr};
+  float distance{0.0F};
+};
+
+using NearbyRows = std::array<NearbyRow, kNearbyRows>;
+
+void Insert(NearbyRows& rows, std::size_t& used,
+            const NearbyRow& row) noexcept {
+  std::size_t slot{used < kNearbyRows ? used : kNearbyRows - 1};
+  if (used < kNearbyRows) {
+    ++used;
+  } else if (rows.at(slot).distance <= row.distance) {
+    return;
+  }
+
+  while (slot > 0 && rows.at(slot - 1).distance > row.distance) {
+    rows.at(slot) = rows.at(slot - 1);
+    --slot;
+  }
+  rows.at(slot) = row;
+}
+
+[[nodiscard]] const char* KindName(Kind kind) noexcept {
+  switch (kind) {
+    case Kind::Self:
+      return "self";
+    case Kind::Enemy:
+      return "enemy";
+    case Kind::Ally:
+      return "ally";
+    case Kind::Civilian:
+      return "civilian";
+    case Kind::Predator:
+      return "predator";
+    case Kind::Animal:
+      return "animal";
+    case Kind::Vehicle:
+      return "vehicle";
+    case Kind::Prop:
+    default:
+      return "prop";
+  }
+}
+
+void ShowNearby(const Vec3& eye) {
+  const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
+  const games::fc3::PawnInfo* const kSelf{FindSelf(kSnapshot)};
+  NearbyRows rows{};
+  std::size_t used{0};
+
+  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
+    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+    const float kDistance{DistanceTo(eye, kEntity.transform.Translation())};
+    if (kDistance <= kNearbyRange) {
+      Insert(rows, used, NearbyRow{.entity = &kEntity, .distance = kDistance});
+    }
+  }
+
+  ImGui::SeparatorText("nearest");
+  for (std::size_t index{0}; index < used; ++index) {
+    const games::fc3::EntityInfo& kEntity{*rows.at(index).entity};
+    ImGui::Text("%8llX %5.1fm %-8s a%-3d f%-3d %s",
+                static_cast<std::uint64_t>(kEntity.address),
+                static_cast<double>(rows.at(index).distance),
+                KindName(KindOf(kEntity, kSelf)),
+                kEntity.pawn ? kEntity.pawn->army : kNoPawnField,
+                kEntity.pawn ? kEntity.pawn->faction : kNoPawnField,
+                kEntity.identity ? "arch" : "--");
+  }
+}
+
+void ShowInspector(const Vec3& eye, const Vec3& forward) {
+  const AimHit kHit{UnderCrosshair(eye, forward)};
+  const games::fc3::EntityInfo* const kNearest{kHit.entity};
+  const float kBestDistance{kHit.distance};
+
   ImGui::SeparatorText("crosshair");
-  if (nearest == nullptr) {
+  if (kNearest == nullptr) {
     ImGui::TextUnformatted("nothing within the aim cone");
     return;
   }
 
   ImGui::Text("%-14s %llX", "entity",
-              static_cast<std::uint64_t>(nearest->address));
+              static_cast<std::uint64_t>(kNearest->address));
   ImGui::Text("%-14s %llX", "vtable",
-              static_cast<std::uint64_t>(nearest->vtable));
-  ImGui::Text("%-14s %.1f m", "distance", static_cast<double>(bestDistance));
-  ShowVector("position", nearest->transform.Translation());
-  ShowVector("aabb min", nearest->box.min);
-  ShowVector("aabb max", nearest->box.max);
-  if (!nearest->pawn) {
+              static_cast<std::uint64_t>(kNearest->vtable));
+  if (kNearest->identity) {
+    ImGui::Text("%-14s %u  hash %08X", "class", kNearest->identity->classIndex,
+                kNearest->identity->classHash);
+  } else {
+    ImGui::TextUnformatted("class          none");
+  }
+  ImGui::Text("%-14s %.1f m", "distance", static_cast<double>(kBestDistance));
+  ShowVector("position", kNearest->transform.Translation());
+  ShowVector("aabb min", kNearest->box.min);
+  ShowVector("aabb max", kNearest->box.max);
+  if (!kNearest->pawn) {
     ImGui::TextUnformatted("not a pawn: no army fields");
     return;
   }
-  const games::fc3::PawnInfo& kPawn{*nearest->pawn};
+  const games::fc3::PawnInfo& kPawn{*kNearest->pawn};
   ImGui::Text("%-14s %d  faction %d  dead %u", "army", kPawn.army,
               kPawn.faction, kPawn.deadByte);
   ImGui::Text("%-14s %08X", "agent type", kPawn.agentType);
   ImGui::Text("%-14s own %02X  hostile %02X  reverse %02X", "masks",
               kPawn.ownArmyBit, kPawn.hostileMask, kPawn.reverseHostileMask);
+}
+
+void ShowEntities(const Vec3& eye, const Vec3& forward) {
+  ShowInspector(eye, forward);
+  ShowNearby(eye);
 }
 
 struct VtableTally {
@@ -533,7 +726,7 @@ void DrawFrame() noexcept {
 
   ShowMarkers(kDisplay, kMarkers.ahead, kMarkers.probe);
   ShowPools(kEye);
-  ShowInspector(kEye, kForward);
+  ShowEntities(kEye, kForward);
   ShowVtables();
   ImGui::End();
 
