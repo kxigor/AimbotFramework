@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <system_error>
 
 namespace afw::games::fc3 {
@@ -84,9 +85,6 @@ constexpr std::size_t kBuffers{3};
   return frames;
 }
 
-// A generation is everything the engine walked between two presented frames.
-// One pass is not a whole world -- several of them together are -- so the
-// boundary belongs to the reader, and the writer only acts on the request.
 void BeginGeneration() noexcept {
   WritingIndex() =
       ReadySlot().exchange(WritingIndex(), std::memory_order_acq_rel);
@@ -105,24 +103,27 @@ const hook::Hook*& BoundUpdate() noexcept {
   return hook;
 }
 
-void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
+void AcceptEntity(std::uintptr_t address, EntitySnapshot& snapshot,
+                  std::uint32_t typeBit) noexcept {
   const std::expected<RawEntity, std::error_code> kRaw{ReadEntity(address)};
   if (!kRaw) {
     ++snapshot.unreadable;
+    snapshot.CountByType(typeBit, false);
     return;
   }
 
   std::expected<EntityInfo, Rejection> classified{Classify(*kRaw)};
   if (!classified) {
     ++snapshot.rejected.at(static_cast<std::size_t>(classified.error()));
+    snapshot.CountByType(typeBit, false);
     if (classified.error() == Rejection::NotRigid) {
       snapshot.SampleNotRigid(address);
     }
     return;
   }
 
-  // Asked of every entity, not only the ones shaped like a person: an animal is
-  // a pawn too, and the army invariant is what proves the record real.
+  snapshot.CountByType(typeBit, true);
+
   classified->pawn = ReadPawn(address);
 
   snapshot.items.at(snapshot.count) = *classified;
@@ -133,6 +134,27 @@ void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
   if (classified->humanoid) {
     ++snapshot.humanoids;
   }
+}
+
+void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot,
+                 std::uint32_t typeBit) noexcept {
+  if (IsEntityClass(address)) {
+    AcceptEntity(address, snapshot, typeBit);
+    return;
+  }
+
+  const std::optional<std::uintptr_t> kOwner{OwnerOfComponent(address)};
+  if (!kOwner) {
+    ++snapshot.foreignClass;
+    snapshot.CountByType(typeBit, false);
+    return;
+  }
+  if (AlreadySeen(*kOwner)) {
+    return;
+  }
+
+  ++snapshot.viaComponent;
+  AcceptEntity(*kOwner, snapshot, typeBit);
 }
 
 [[nodiscard]] std::uint32_t CollectGroup(std::uintptr_t group) noexcept {
@@ -150,6 +172,11 @@ void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
     return 0;
   }
 
+  const std::uint32_t kTypeBit{
+      process::ReadAt<std::uint32_t>(*kEntityGroup + kEntityGroupTypeBit)
+          .value_or(kGroupTypes) &
+      (kGroupTypes - 1)};
+
   EntitySnapshot& snapshot{Buffers().at(WritingIndex()).snapshot};
 
   for (std::uint32_t index{0}; index < *kCount; ++index) {
@@ -165,7 +192,7 @@ void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot) noexcept {
       continue;
     }
 
-    StoreEntity(*kEntity, snapshot);
+    StoreEntity(*kEntity, snapshot, kTypeBit);
   }
 
   return *kCount;

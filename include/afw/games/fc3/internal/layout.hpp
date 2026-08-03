@@ -38,11 +38,26 @@ constexpr std::uintptr_t kViewportHeight{0x14};
 
 constexpr std::uintptr_t kRunAllGroupSlotAddress{0x115a93c0};
 
+// The engine has no RTTI; class identity lives in a registry. A class
+// descriptor and a class definition share a layout -- a count at +0x04 and an
+// inline array of ancestor name hashes from +0x08, the class's own hash last.
+// CClassDescriptor::MatchesHash at 0x1005a053 is just a walk of that array, so
+// only obtaining the descriptor needs the engine: virtual slot 1.
+constexpr std::uintptr_t kEntityClassDef{0x11E13600};
+constexpr std::uintptr_t kClassDefAncestors{0x04};
+constexpr std::uintptr_t kClassDefHashes{0x08};
+constexpr std::size_t kClassDescriptorSlot{1};
+
 constexpr std::uintptr_t kSchedulerGroups{0x20};
 constexpr std::uintptr_t kSchedulerGroupCount{0x24};
 constexpr std::uintptr_t kGroupEntityGroup{0x08};
 constexpr std::uintptr_t kEntityGroupArray{0x04};
 constexpr std::uintptr_t kEntityGroupCount{0x08};
+// Update groups are typed, and the type decides what the array actually holds:
+// CEntityUpdateGroup::ForEachEntity builds its mask as 1 << *(group + 0x18)
+// before handing each element to the group's own callback. An element is only
+// a CEntity for some of those types.
+constexpr std::uintptr_t kEntityGroupTypeBit{0x18};
 
 // The row-major world matrix: rows 0..2 are the axes, row 3 at +0x50 is the
 // position. Read whole rather than row by row.
@@ -56,6 +71,16 @@ constexpr std::uintptr_t kEntityTransform{0x20};
 
 constexpr std::uintptr_t kEntityComponentArray{0x88};
 constexpr std::uintptr_t kEntityComponentCount{0x8C};
+
+// CEntityUpdaterManager::AddEntityToUpdate at 0x107c5d96 queues an entity and
+// then every component of its +0x88 array, so an update group holds both side
+// by side and most of what it holds is components. A component does not point
+// at its entity directly: +0x04 is a handle shared by all components of the
+// same entity, and the entity sits at +0x0C of that handle. Verified live in
+// both directions on two unrelated entities -- from 0x53D5D400 out through its
+// component array and back, and the same for 0x53D5E060.
+constexpr std::uintptr_t kComponentOwnerHandle{0x04};
+constexpr std::uintptr_t kHandleEntity{0x0C};
 
 // Byte offset, confirmed at 0x11336d60 (ADD EDI,0x100); the decompiler renders
 // it as +0x40 because it is pointer arithmetic on the component type. Which

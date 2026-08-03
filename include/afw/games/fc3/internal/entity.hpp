@@ -29,6 +29,25 @@ struct RawEntity {
 [[nodiscard]] std::optional<Matrix4> ReadComponentWorldMatrix(
     std::uintptr_t address) noexcept;
 
+// The update groups hold objects of several classes side by side, and reading
+// one class's offsets out of another yields nonsense that only looks like a
+// failed entity. This asks the engine's own type registry instead, through the
+// one virtual it takes to obtain a class descriptor. Answers are cached per
+// vtable, so the call happens once per class, not once per object.
+//
+// Returns false when the game module is absent, which is every unit test: the
+// call is never made outside the game.
+[[nodiscard]] bool IsEntityClass(std::uintptr_t address) noexcept;
+
+// Most of what an update group holds is components rather than entities, so
+// rejecting a foreign class loses the entity behind it -- which is why animals
+// and a share of the civilians never appeared. This walks the link back. The
+// address it returns is confirmed to be an entity before it is handed out, so
+// a pointer read out of an object that is not a component at all fails here
+// rather than downstream.
+[[nodiscard]] std::optional<std::uintptr_t> OwnerOfComponent(
+    std::uintptr_t address) noexcept;
+
 [[nodiscard]] std::expected<RawEntity, std::error_code> ReadEntity(
     std::uintptr_t address) noexcept;
 

@@ -13,6 +13,16 @@ namespace afw::games::fc3 {
 constexpr std::uint32_t kMaxGroups{256};
 constexpr std::uint32_t kMaxGroupEntities{4096};
 constexpr std::uint32_t kMaxComponents{128};
+constexpr std::uint32_t kMaxAncestors{32};
+
+// Calling through a vtable is only safe if the vtable is the game's own, so the
+// pointer has to land inside its image. The module is 37 MB; this bounds it
+// without needing the exact size.
+constexpr std::uintptr_t kMaxModuleSpan{0x4000000};
+
+// One entry per distinct class seen, so the engine is asked once per class
+// rather than once per object.
+constexpr std::size_t kClassCacheSlots{64};
 
 // 0 Blue, 1 Red, 2 Grey, 3 Neutral, 4 Green, 5 Yellow.
 constexpr std::int32_t kMaxArmy{5};

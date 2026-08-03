@@ -1,8 +1,11 @@
+#include <afw/abi/abi.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/process/memory.hpp>
+#include <array>
+#include <bit>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -19,8 +22,96 @@ namespace {
          std::fabs(position.y - kTemplateCoordinate) <= kTemplateTolerance;
 }
 
-// The engine's own choice, in its own order: the component's copy when there is
-// one, the entity's own only as the fallback.
+using DescriptorFn = void*(AFW_ENGINE_CALL*)(void* self);
+
+struct ClassVerdict {
+  std::uintptr_t vtable{};
+  bool isEntity{};
+};
+
+[[nodiscard]] std::array<ClassVerdict, kClassCacheSlots>&
+ClassCache() noexcept {
+  static std::array<ClassVerdict, kClassCacheSlots> cache{};
+  return cache;
+}
+
+[[nodiscard]] std::uint32_t& CachedClasses() noexcept {
+  static std::uint32_t used{0};
+  return used;
+}
+
+[[nodiscard]] std::optional<std::uint32_t> OwnHash(
+    std::uintptr_t classDef) noexcept {
+  const std::expected<std::uint32_t, std::error_code> kAncestors{
+      process::ReadAt<std::uint32_t>(classDef + kClassDefAncestors)};
+  if (!kAncestors || *kAncestors == 0 || *kAncestors > kMaxAncestors) {
+    return std::nullopt;
+  }
+
+  const std::expected<std::uint32_t, std::error_code> kHash{
+      process::ReadAt<std::uint32_t>(
+          classDef + kClassDefHashes +
+          ((*kAncestors - 1) * sizeof(std::uint32_t)))};
+  if (!kHash) {
+    return std::nullopt;
+  }
+
+  return *kHash;
+}
+
+[[nodiscard]] bool DescribesAnEntity(std::uintptr_t descriptor,
+                                     std::uint32_t wanted) noexcept {
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(descriptor + kClassDefAncestors)};
+  if (!kCount || *kCount == 0 || *kCount > kMaxAncestors) {
+    return false;
+  }
+
+  for (std::uint32_t index{0}; index < *kCount; ++index) {
+    const std::expected<std::uint32_t, std::error_code> kHash{
+        process::ReadAt<std::uint32_t>(descriptor + kClassDefHashes +
+                                       (index * sizeof(std::uint32_t)))};
+    if (kHash && *kHash == wanted) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+[[nodiscard]] std::optional<bool> AskTheEngine(std::uintptr_t address,
+                                               std::uintptr_t vtable) noexcept {
+  const std::uintptr_t kBase{Resolve(kGhidraImageBase)};
+  if (kBase == 0) {
+    return std::nullopt;
+  }
+
+  const std::optional<std::uint32_t> kWanted{OwnHash(Resolve(kEntityClassDef))};
+  if (!kWanted) {
+    return std::nullopt;
+  }
+
+  if (vtable < kBase || vtable >= kBase + kMaxModuleSpan) {
+    return false;
+  }
+
+  const std::expected<std::uintptr_t, std::error_code> kSlot{
+      process::ReadPointerAs<EnginePtr>(
+          vtable + (kClassDescriptorSlot * sizeof(EnginePtr)))};
+  if (!kSlot || *kSlot < kBase || *kSlot >= kBase + kMaxModuleSpan) {
+    return false;
+  }
+
+  const DescriptorFn kDescriptorOf{std::bit_cast<DescriptorFn>(*kSlot)};
+  const void* const kDescriptor{kDescriptorOf(std::bit_cast<void*>(address))};
+  if (kDescriptor == nullptr) {
+    return false;
+  }
+
+  return DescribesAnEntity(std::bit_cast<std::uintptr_t>(kDescriptor),
+                           *kWanted);
+}
+
 [[nodiscard]] std::expected<Matrix4, std::error_code> ReadWorldMatrix(
     std::uintptr_t address) noexcept {
   const std::optional<Matrix4> kFromComponent{
@@ -32,9 +123,6 @@ namespace {
   return process::ReadAt<Matrix4>(address + kEntityTransform);
 }
 
-// The own-army mask names the army the pawn belongs to, so a record is only
-// believable when the two agree. Both agreements exist: one bit for an enlisted
-// pawn, every bit for one the engine does not enlist at all.
 [[nodiscard]] bool IsConsistentArmy(std::int32_t army,
                                     std::uint8_t ownBit) noexcept {
   if (army == kNoArmy) {
@@ -56,6 +144,54 @@ namespace {
 }
 
 }  // namespace
+
+bool IsEntityClass(std::uintptr_t address) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kVtable{
+      process::ReadPointerAs<EnginePtr>(address)};
+  if (!kVtable || *kVtable == 0) {
+    return false;
+  }
+
+  std::array<ClassVerdict, kClassCacheSlots>& cache{ClassCache()};
+  for (std::uint32_t index{0}; index < CachedClasses(); ++index) {
+    if (cache.at(index).vtable == *kVtable) {
+      return cache.at(index).isEntity;
+    }
+  }
+
+  const std::optional<bool> kVerdict{AskTheEngine(address, *kVtable)};
+  if (!kVerdict) {
+    return true;
+  }
+
+  if (CachedClasses() < kClassCacheSlots) {
+    cache.at(CachedClasses()) =
+        ClassVerdict{.vtable = *kVtable, .isEntity = *kVerdict};
+    ++CachedClasses();
+  }
+
+  return *kVerdict;
+}
+
+std::optional<std::uintptr_t> OwnerOfComponent(
+    std::uintptr_t address) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kHandle{
+      process::ReadPointerAs<EnginePtr>(address + kComponentOwnerHandle)};
+  if (!kHandle || *kHandle == 0) {
+    return std::nullopt;
+  }
+
+  const std::expected<std::uintptr_t, std::error_code> kOwner{
+      process::ReadPointerAs<EnginePtr>(*kHandle + kHandleEntity)};
+  if (!kOwner || *kOwner == 0 || *kOwner == address) {
+    return std::nullopt;
+  }
+  if (!IsEntityClass(*kOwner)) {
+    return std::nullopt;
+  }
+
+  return *kOwner;
+}
 
 std::optional<Matrix4> ReadComponentWorldMatrix(
     std::uintptr_t address) noexcept {

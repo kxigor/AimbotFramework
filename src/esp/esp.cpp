@@ -45,12 +45,10 @@ constexpr ImU32 kHumanoidColour{0xFF00D0FF};
 constexpr std::array<ImU32, 6> kArmyColours{0xFFFF6030, 0xFF3030FF, 0xFFA0A0A0,
                                             0xFFFFFFFF, 0xFF30FF30, 0xFF30FFFF};
 
-// Same order as games::fc3::Rejection.
 constexpr std::array<const char*, games::fc3::kRejectionCount> kRejectionNames{
     "no vtable",  "not rigid",        "bad box",
     "not finite", "beyond the world", "template spawn"};
 
-// ImGui packs these as 0xAABBGGRR, so read them right to left.
 constexpr ImU32 kCivilianColour{0xFFA0FFA0};
 constexpr ImU32 kAnimalColour{0xFF5050C0};
 constexpr ImU32 kVehicleColour{0xFF40C0FF};
@@ -95,6 +93,33 @@ void ShowPoint(const char* label, const std::optional<ScreenPoint>& point) {
               static_cast<double>(point->y));
 }
 
+void ShowCensus() {
+  const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
+  ImGui::Text("%-18s %u", "in the world", kSnapshot.count);
+  ImGui::Text("%-18s %u", "over capacity", kSnapshot.dropped);
+  ImGui::Text("%-18s %u", "humanoid boxes", kSnapshot.humanoids);
+  ImGui::Text("%-18s %u", "pawns", kSnapshot.pawns);
+  ImGui::Text("%-18s %u", "via component", kSnapshot.viaComponent);
+
+  ImGui::SeparatorText("dropped, by reason");
+  ImGui::Text("%-18s %u", "unreadable", kSnapshot.unreadable);
+  ImGui::Text("%-18s %u", "not an entity", kSnapshot.foreignClass);
+  for (std::size_t reason{0}; reason < games::fc3::kRejectionCount; ++reason) {
+    ImGui::Text("%-18s %u", kRejectionNames.at(reason),
+                kSnapshot.rejected.at(reason));
+  }
+
+  ImGui::SeparatorText("by update-group type");
+  for (std::size_t type{0}; type < games::fc3::kGroupTypes; ++type) {
+    const std::uint32_t kTaken{kSnapshot.acceptedByType.at(type)};
+    const std::uint32_t kLost{kSnapshot.droppedByType.at(type)};
+    if (kTaken == 0 && kLost == 0) {
+      continue;
+    }
+    ImGui::Text("type %-12zu %5u kept   %5u dropped", type, kTaken, kLost);
+  }
+}
+
 void ShowChain(const games::fc3::Diagnostics& report, const ImVec2& display) {
   ImGui::SeparatorText("chain");
   ShowAddress("module base", report.moduleBase);
@@ -123,18 +148,7 @@ void ShowChain(const games::fc3::Diagnostics& report, const ImVec2& display) {
   ImGui::Text("%-18s %u", "entities", kCensus.entities);
   ImGui::Text("%-18s %u", "groups skipped", kCensus.skipped);
 
-  const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  ImGui::Text("%-18s %u", "in the world", kSnapshot.count);
-  ImGui::Text("%-18s %u", "over capacity", kSnapshot.dropped);
-  ImGui::Text("%-18s %u", "humanoid boxes", kSnapshot.humanoids);
-  ImGui::Text("%-18s %u", "pawns", kSnapshot.pawns);
-
-  ImGui::SeparatorText("dropped, by reason");
-  ImGui::Text("%-18s %u", "unreadable", kSnapshot.unreadable);
-  for (std::size_t reason{0}; reason < games::fc3::kRejectionCount; ++reason) {
-    ImGui::Text("%-18s %u", kRejectionNames.at(reason),
-                kSnapshot.rejected.at(reason));
-  }
+  ShowCensus();
 }
 
 void ShowAngle(const char* label, float radians) {
@@ -207,17 +221,11 @@ struct ScreenRect {
 
 enum class Kind : std::uint8_t { Military, Civilian, Animal, Vehicle, Prop };
 
-// A pawn record only exists where the army invariant held, so its presence is
-// what separates something alive from scenery; the shape then separates a
-// person from an animal, and the size separates a vehicle from a crate.
 [[nodiscard]] Kind KindOf(const games::fc3::EntityInfo& entity) noexcept {
   if (entity.pawn && entity.pawn->army != games::fc3::kNoArmy) {
     return Kind::Military;
   }
 
-  // Shape alone is enough to box something person-sized. Requiring the pawn
-  // record here would drop every civilian whose fields did not read, which is
-  // how they ended up as dots.
   if (entity.humanoid) {
     return Kind::Civilian;
   }
