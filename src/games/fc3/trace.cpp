@@ -179,7 +179,7 @@ std::optional<TraceAnswer> TraceLook(int query) noexcept {
 
 namespace {
 
-constexpr std::size_t kReachRows{32};
+constexpr std::size_t kReachRows{64};
 constexpr std::uint64_t kReachInterval{15};
 constexpr std::uint64_t kReachGiveUp{45};
 constexpr float kReachSlack{1.5F};
@@ -198,20 +198,25 @@ struct Reach {
   return rows;
 }
 
+// The oldest question is the one worth forgetting. Taking rows in turn instead
+// would evict whatever happened to be next, answer and all, and with more
+// targets about than there are rows nothing would ever settle -- every one of
+// them would read as reachable because none of them would keep an answer long
+// enough to be told otherwise.
 [[nodiscard]] Reach& RowFor(std::uintptr_t entity) noexcept {
-  static std::size_t next{0};
-
+  Reach* oldest{&Reaches().front()};
   for (Reach& row : Reaches()) {
     if (row.entity == entity) {
       return row;
     }
+    if (row.asked < oldest->asked) {
+      oldest = &row;
+    }
   }
 
-  Reach& taken{Reaches().at(next)};
-  next = (next + 1) % kReachRows;
-  taken = Reach{.entity = entity};
+  *oldest = Reach{.entity = entity};
 
-  return taken;
+  return *oldest;
 }
 
 // A walk that met nothing got there. So did one whose first hit is the target

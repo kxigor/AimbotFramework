@@ -216,6 +216,7 @@ void UpdateReach() noexcept {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   const games::fc3::PawnInfo* const kSelf{esp::FindSelf(kSnapshot)};
   const float kRange{config::Current().aimRange.load()};
+  const float kCone{HalfConeRadians(config::Current().aimConeDegrees.load())};
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
@@ -228,9 +229,13 @@ void UpdateReach() noexcept {
       continue;
     }
 
+    // And only the ones the assist could actually settle on. Asking about the
+    // whole map would spend rows on targets that lose on the aim term anyway,
+    // and there are only so many rows to go round.
     const math::Vec3 kPoint{aimbot::AimPoint(kEntity)};
-    const float kSpan{(kPoint - kCamera->position).Length()};
-    if (kSpan > kRange) {
+    const math::Vec3 kOffset{kPoint - kCamera->position};
+    if (kOffset.Length() > kRange ||
+        aimbot::AngleBetween(kCamera->forward, kOffset) > kCone) {
       continue;
     }
 
@@ -249,7 +254,8 @@ void UpdateReach() noexcept {
                  .maxError = HalfConeRadians(kSettings.aimConeDegrees.load())},
       .weights = {.aim = kSettings.aimWeightAim.load(),
                   .distance = kSettings.aimWeightDistance.load(),
-                  .priority = kSettings.aimWeightPriority.load()}};
+                  .priority = kSettings.aimWeightPriority.load(),
+                  .reach = kSettings.aimWeightReach.load()}};
 
   return aimbot::ChooseTarget(
       snapshot, camera.position, camera.forward, kChoice,
@@ -370,22 +376,33 @@ void AimAt(std::uintptr_t state, const aimbot::Target& target,
   return owner == GetCurrentProcessId();
 }
 
-// Held rather than clicked: an automatic weapon keeps firing while the aim
-// stays on, and a single shot needs the button to come back up anyway. The
-// state is remembered so the button is only ever pressed or released on the
-// frame the answer changes.
+// Cycled rather than held. A rifle fires for as long as the button is down, so
+// holding it would do; a pistol fires once per press and wants the button back
+// up before it will fire again. Simply holding gave one shot and then silence
+// until the aim moved to somebody else, which is the button never coming up.
+//
+// Letting it up for a single frame in five answers both: the rifle loses a
+// frame of a burst it would not notice, and the pistol gets a fresh press a
+// dozen times a second, which is faster than any of them will fire anyway.
+constexpr std::uint64_t kFireCycle{5};
+constexpr std::uint64_t kFireDown{4};
+
 void HoldFire(bool wanted) noexcept {
   static bool held{false};
-  if (wanted == held) {
+  static std::uint64_t phase{0};
+
+  const bool kDown{wanted && (phase % kFireCycle) < kFireDown};
+  phase = wanted ? phase + 1 : 0;
+  if (kDown == held) {
     return;
   }
 
   INPUT input{};
   input.type = INPUT_MOUSE;
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
-  input.mi.dwFlags = wanted ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+  input.mi.dwFlags = kDown ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
   if (SendInput(1, &input, sizeof(input)) == 1) {
-    held = wanted;
+    held = kDown;
   }
 }
 
