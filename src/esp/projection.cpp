@@ -1,4 +1,5 @@
 #include <afw/esp/projection.hpp>
+#include <afw/math/aabb.hpp>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -12,6 +13,35 @@ namespace {
 constexpr float kHalf{0.5F};
 constexpr float kMinDepth{0.05F};
 constexpr float kFullAngle{2.0F};
+constexpr std::size_t kTranslationX{12};
+
+[[nodiscard]] std::optional<ScreenRect> ProjectCorners(
+    const math::Aabb& box, const Matrix4& frame, const Matrix4& projection,
+    float width, float height) noexcept {
+  ScreenRect rect{.left = std::numeric_limits<float>::max(),
+                  .top = std::numeric_limits<float>::max(),
+                  .right = std::numeric_limits<float>::lowest(),
+                  .bottom = std::numeric_limits<float>::lowest()};
+
+  for (std::size_t corner{0}; corner < math::kAabbCorners; ++corner) {
+    const std::optional<ScreenPoint> kPoint{WorldToScreen(
+        projection, frame.TransformPoint(box.Corner(corner)), width, height)};
+    if (!kPoint) {
+      return std::nullopt;
+    }
+
+    rect.left = std::min(rect.left, kPoint->x);
+    rect.right = std::max(rect.right, kPoint->x);
+    rect.top = std::min(rect.top, kPoint->y);
+    rect.bottom = std::max(rect.bottom, kPoint->y);
+  }
+
+  if (rect.right <= rect.left || rect.bottom <= rect.top) {
+    return std::nullopt;
+  }
+
+  return rect;
+}
 
 }  // namespace
 
@@ -77,30 +107,27 @@ float VerticalFov(float horizontalRadians, float aspect) noexcept {
 std::optional<ScreenRect> ProjectBox(const games::fc3::EntityInfo& entity,
                                      const Matrix4& projection, float width,
                                      float height) noexcept {
-  ScreenRect rect{.left = std::numeric_limits<float>::max(),
-                  .top = std::numeric_limits<float>::max(),
-                  .right = std::numeric_limits<float>::lowest(),
-                  .bottom = std::numeric_limits<float>::lowest()};
+  return ProjectCorners(entity.box, entity.transform, projection, width,
+                        height);
+}
 
-  for (std::size_t corner{0}; corner < math::kAabbCorners; ++corner) {
-    const std::optional<ScreenPoint> kPoint{WorldToScreen(
-        projection, entity.transform.TransformPoint(entity.box.Corner(corner)),
-        width, height)};
-    if (!kPoint) {
-      return std::nullopt;
-    }
+Matrix4 FrameAt(const Matrix4& orientation, const Vec3& centre) noexcept {
+  Matrix4 frame{orientation};
+  frame.cells.at(kTranslationX) = centre.x;
+  frame.cells.at(kTranslationX + 1) = centre.y;
+  frame.cells.at(kTranslationX + 2) = centre.z;
 
-    rect.left = std::min(rect.left, kPoint->x);
-    rect.right = std::max(rect.right, kPoint->x);
-    rect.top = std::min(rect.top, kPoint->y);
-    rect.bottom = std::max(rect.bottom, kPoint->y);
-  }
+  return frame;
+}
 
-  if (rect.right <= rect.left || rect.bottom <= rect.top) {
-    return std::nullopt;
-  }
+std::optional<ScreenRect> ProjectCube(const Matrix4& frame, float halfExtent,
+                                      const Matrix4& projection, float width,
+                                      float height) noexcept {
+  const math::Aabb kCube{
+      .min = Vec3{.x = -halfExtent, .y = -halfExtent, .z = -halfExtent},
+      .max = Vec3{.x = halfExtent, .y = halfExtent, .z = halfExtent}};
 
-  return rect;
+  return ProjectCorners(kCube, frame, projection, width, height);
 }
 
 }  // namespace afw::esp

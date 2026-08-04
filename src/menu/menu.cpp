@@ -90,6 +90,7 @@ void Draw() noexcept {
     Toggle("birds", settings.espBirds);
     Toggle("vehicles", settings.espVehicles);
     Toggle("props", settings.espProps);
+    Toggle("head boxes", settings.espHeadBoxes);
   }
 
   ImGui::SeparatorText("session");

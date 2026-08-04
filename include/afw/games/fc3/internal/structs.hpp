@@ -92,6 +92,10 @@ struct EntityInfo {
   Matrix4 transform{};
   Aabb box{};
   std::optional<PawnInfo> pawn;
+  // Where the skeleton's "Head" bone stands this frame, in world space. Only
+  // read for entities the engine drives with a pawn agent, and absent when that
+  // skeleton has no such bone.
+  std::optional<Vec3> head;
   bool humanoid{};
 };
 

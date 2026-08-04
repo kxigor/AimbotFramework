@@ -45,4 +45,18 @@ struct ScreenRect {
     const games::fc3::EntityInfo& entity, const Matrix4& projection,
     float width, float height) noexcept;
 
+// An orientation moved to stand at a world point, which is what a cube around
+// one bone needs: the body's axes, the bone's position.
+[[nodiscard]] Matrix4 FrameAt(const Matrix4& orientation,
+                              const Vec3& centre) noexcept;
+
+// The screen bounds of a cube of the given half extent standing in that frame.
+// Sized in the world rather than in pixels, so it shrinks with distance exactly
+// as the entity's own box does.
+[[nodiscard]] std::optional<ScreenRect> ProjectCube(const Matrix4& frame,
+                                                    float halfExtent,
+                                                    const Matrix4& projection,
+                                                    float width,
+                                                    float height) noexcept;
+
 }  // namespace afw::esp

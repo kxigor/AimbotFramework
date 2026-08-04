@@ -16,6 +16,7 @@ struct Settings {
   std::atomic<bool> espAnimals{true};
   std::atomic<bool> espBirds{true};
   std::atomic<bool> espVehicles{true};
+  std::atomic<bool> espHeadBoxes{true};
   // Everything the engine would not name. Off by default: it is most of the
   // world, and near the player it is mostly your own equipment.
   std::atomic<bool> espProps{false};

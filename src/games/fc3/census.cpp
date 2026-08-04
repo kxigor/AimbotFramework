@@ -148,6 +148,9 @@ void AcceptEntity(std::uintptr_t address, EntitySnapshot& snapshot,
   snapshot.CountByType(typeBit, true);
 
   classified->pawn = ReadPawn(address);
+  if (classified->pawn && classified->pawn->kind == AgentKind::Pawn) {
+    classified->head = ReadHeadPosition(address);
+  }
 
   snapshot.items.at(snapshot.count) = *classified;
   ++snapshot.count;

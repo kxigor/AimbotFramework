@@ -14,6 +14,15 @@ constexpr std::uint32_t kMaxGroups{256};
 constexpr std::uint32_t kMaxGroupEntities{4096};
 constexpr std::uint32_t kMaxComponents{128};
 constexpr std::uint32_t kMaxAncestors{32};
+// Measured live: 120 to 166 bones on a character, 58 on a bird, 36 on a
+// vehicle, and a handful on the weapon parts riding on the player.
+constexpr std::uint32_t kMaxBones{512};
+
+// A head belongs to the body it was read from. The matrix the bone is placed by
+// comes from a component chosen by its contents, and a stale one already put an
+// entity 118 m from itself once, so a head further than this from its own
+// entity is a disagreement between the two rather than a head.
+constexpr float kMaxHeadOffset{4.0F};
 
 // Calling through a vtable is only safe if the vtable is the game's own, so the
 // pointer has to land inside its image. The module is 37 MB; this bounds it

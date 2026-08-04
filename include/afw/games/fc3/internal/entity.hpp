@@ -71,4 +71,10 @@ struct RawEntity {
 // calling once the shape says the object is large enough to have them.
 [[nodiscard]] std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept;
 
+// Where the skeleton's "Head" bone stands, in world space. Costs a walk of the
+// entity's components, so it is asked only of what the engine drives with a
+// pawn agent rather than of every entity in the world.
+[[nodiscard]] std::optional<Vec3> ReadHeadPosition(
+    std::uintptr_t address) noexcept;
+
 }  // namespace afw::games::fc3

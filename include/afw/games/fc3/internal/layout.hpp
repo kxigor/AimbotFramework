@@ -86,6 +86,35 @@ constexpr std::uintptr_t kHandleEntity{0x0C};
 // hardcoded vtable without checking the class -- GetPhysComponent is named for
 // CCharacterPhysComponent but looks up CGraphicComponent.
 constexpr std::uintptr_t kComponentWorldMatrix{0x100};
+// The skeleton's pose lives in that same component.
+// Entity_GetBoneHandleTableAndBaseMatrix at 0x11336d3a asks for the bone table
+// through vtable slot 0x74, but that accessor (0x1017fa51) is two instructions:
+// refresh a stale pose, then return component + 0x60. So the table is reachable
+// by reading and the call is not needed. Its own array sits at +0x20 of the
+// table and its count at +0x24, which is where these land.
+constexpr std::uintptr_t kComponentBoneArray{0x80};
+constexpr std::uintptr_t kComponentBoneCount{0x84};
+
+// One entry per bone: the name hash at +0x00, then two whole 4x4 matrices --
+// the bind pose from +0x10 and the current pose from +0x50. BoneHandleTable_
+// GetLocalPos at 0x1059535c reads the translation row of the current one, which
+// is 0x30 into it.
+constexpr std::uintptr_t kBoneStride{0x90};
+constexpr std::uintptr_t kBoneKey{0x00};
+constexpr std::uintptr_t kBonePosePosition{0x80};
+
+// Bone names do not survive into the retail build: "ragdoll_head" occurs in the
+// whole process exactly once, as the literal Combat_IsHeadshotBoneIndex at
+// 0x1047470d compares against, and no loaded skeleton carries a name string at
+// all. A bone is therefore only ever named by its hash.
+//
+// That hash is the engine's own CRC32_CaseSensitive at 0x1008a991 -- table at
+// 0x1170b340, the ordinary reflected CRC-32 already reproducing the class-name
+// hashes. "Head" hashes to this. Its siblings "Spine" (0x530EC1CB) and "Spine1"
+// (0x8F39FA4E) are the two CPlayerCamera__UpdateAimAssist aims at, which is how
+// all three were named without a single name in memory to compare against.
+constexpr std::uint32_t kHeadBoneKey{0x07C159A2};
+
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};

@@ -3,6 +3,7 @@
 
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
+#include <afw/games/fc3/internal/layout.hpp>
 #include <array>
 #include <atomic>
 #include <bit>
@@ -593,6 +594,74 @@ TEST_F(Fc3ComponentUnit, RefusesAnImplausibleComponentCount) {
 
   EXPECT_FALSE(
       afw::games::fc3::ReadComponentWorldMatrix(At(kEntity)).has_value());
+}
+
+// The skeleton's pose rides in the same component that holds the world matrix,
+// and a bone is named only by a hash: the retail build keeps no bone name
+// strings at all. "Head" hashes to kHeadBoneKey under the engine's own CRC-32.
+class Fc3HeadBoneUnit : public Fc3ComponentUnit {
+ protected:
+  static constexpr std::uint32_t kBoneArray{0x2800};
+  static constexpr std::uint32_t kComponentBoneArray{0x80};
+  static constexpr std::uint32_t kComponentBoneCount{0x84};
+  static constexpr std::uint32_t kBoneStride{0x90};
+  static constexpr std::uint32_t kBonePosePosition{0x80};
+  static constexpr std::uint32_t kBones{3};
+  static constexpr std::uint32_t kHeadSlot{2};
+
+  void SetUp() override {
+    Fc3ComponentUnit::SetUp();
+    if (page_ == nullptr) {
+      return;
+    }
+
+    Poke(kComponentTwo + kComponentBoneArray, At(kBoneArray));
+    Poke(kComponentTwo + kComponentBoneCount, kBones);
+
+    PokeBone(0, 0x11111111, 0.0F, 0.0F, 0.0F);
+    PokeBone(1, 0x22222222, 0.0F, 0.0F, 0.9F);
+    PokeBone(kHeadSlot, afw::games::fc3::kHeadBoneKey, 0.02F, 0.0F, 1.5F);
+  }
+
+  void PokeBone(std::uint32_t slot, std::uint32_t key, float x, float y,
+                float z) {
+    const std::uint32_t kEntry{kBoneArray + (slot * kBoneStride)};
+    Poke(kEntry, key);
+    PokeFloat(kEntry + kBonePosePosition, x);
+    PokeFloat(kEntry + kBonePosePosition + 4, y);
+    PokeFloat(kEntry + kBonePosePosition + 8, z);
+  }
+};
+
+TEST_F(Fc3HeadBoneUnit, PlacesTheHeadBoneInTheWorld) {
+  const auto kHead{afw::games::fc3::ReadHeadPosition(At(kEntity))};
+
+  ASSERT_TRUE(kHead.has_value());
+  EXPECT_FLOAT_EQ(kHead->x, 7.02F);
+  EXPECT_FLOAT_EQ(kHead->y, 8.0F);
+  EXPECT_FLOAT_EQ(kHead->z, 10.5F);
+}
+
+// Vehicles carry a skeleton and no head in it, so a miss is the ordinary answer
+// rather than a failure.
+TEST_F(Fc3HeadBoneUnit, FindsNothingWhenTheSkeletonHasNoHead) {
+  PokeBone(kHeadSlot, 0x33333333, 0.0F, 0.0F, 1.5F);
+
+  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
+}
+
+// A head that lands a world away came from a matrix belonging to something
+// else. One stale component already put an entity 118 m from itself.
+TEST_F(Fc3HeadBoneUnit, RefusesAHeadTooFarFromItsOwnBody) {
+  PokeBone(kHeadSlot, afw::games::fc3::kHeadBoneKey, 0.0F, 0.0F, 40.0F);
+
+  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
+}
+
+TEST_F(Fc3HeadBoneUnit, RefusesAnImplausibleBoneCount) {
+  Poke(kComponentTwo + kComponentBoneCount, 100000);
+
+  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
 }
 
 TEST_F(Fc3CensusUnit, AnImplausibleGroupCountIsCapped) {

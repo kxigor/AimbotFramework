@@ -390,6 +390,74 @@ void ReadPawnAgentFields(std::uintptr_t agent, PawnInfo& pawn) noexcept {
   return pawn;
 }
 
+struct RigidComponent {
+  std::uintptr_t address{};
+  Matrix4 transform{};
+};
+
+[[nodiscard]] std::optional<RigidComponent> FindRigidComponent(
+    std::uintptr_t address) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kArray{
+      process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(address + kEntityComponentCount)};
+  if (!kArray || !kCount || *kArray == 0 || *kCount > kMaxComponents) {
+    return std::nullopt;
+  }
+
+  for (std::uint32_t index{0}; index < *kCount; ++index) {
+    const std::expected<std::uintptr_t, std::error_code> kComponent{
+        process::ReadPointerAs<EnginePtr>(*kArray +
+                                          (index * sizeof(EnginePtr)))};
+    if (!kComponent || *kComponent == 0) {
+      continue;
+    }
+
+    const std::expected<Matrix4, std::error_code> kMatrix{
+        process::ReadAt<Matrix4>(*kComponent + kComponentWorldMatrix)};
+    if (kMatrix && kMatrix->IsRigid(kUnitTolerance, kAxisTolerance)) {
+      return RigidComponent{.address = *kComponent, .transform = *kMatrix};
+    }
+  }
+
+  return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Vec3> ReadBonePosition(
+    const RigidComponent& component, std::uint32_t key) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kBones{
+      process::ReadPointerAs<EnginePtr>(component.address +
+                                        kComponentBoneArray)};
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(component.address + kComponentBoneCount)};
+  if (!kBones || !kCount || *kBones == 0 || *kCount == 0 ||
+      *kCount > kMaxBones) {
+    return std::nullopt;
+  }
+
+  for (std::uint32_t index{0}; index < *kCount; ++index) {
+    const std::uintptr_t kEntry{*kBones + (index * kBoneStride)};
+    const std::expected<std::uint32_t, std::error_code> kKey{
+        process::ReadAt<std::uint32_t>(kEntry + kBoneKey)};
+    if (!kKey) {
+      return std::nullopt;
+    }
+    if (*kKey != key) {
+      continue;
+    }
+
+    const std::expected<Vec3, std::error_code> kLocal{
+        process::ReadAt<Vec3>(kEntry + kBonePosePosition)};
+    if (!kLocal || !kLocal->IsFinite()) {
+      return std::nullopt;
+    }
+
+    return component.transform.TransformPoint(*kLocal);
+  }
+
+  return std::nullopt;
+}
+
 [[nodiscard]] bool IsHumanoid(const Aabb& box) noexcept {
   return box.max.z > kHumanoidMinHeight && box.max.z < kHumanoidMaxHeight &&
          std::fabs(box.min.z) < kHumanoidFootTolerance &&
@@ -429,30 +497,12 @@ std::optional<std::uintptr_t> OwnerOfComponent(
 
 std::optional<Matrix4> ReadComponentWorldMatrix(
     std::uintptr_t address) noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kArray{
-      process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
-  const std::expected<std::uint32_t, std::error_code> kCount{
-      process::ReadAt<std::uint32_t>(address + kEntityComponentCount)};
-  if (!kArray || !kCount || *kArray == 0 || *kCount > kMaxComponents) {
+  const std::optional<RigidComponent> kComponent{FindRigidComponent(address)};
+  if (!kComponent) {
     return std::nullopt;
   }
 
-  for (std::uint32_t index{0}; index < *kCount; ++index) {
-    const std::expected<std::uintptr_t, std::error_code> kComponent{
-        process::ReadPointerAs<EnginePtr>(*kArray +
-                                          (index * sizeof(EnginePtr)))};
-    if (!kComponent || *kComponent == 0) {
-      continue;
-    }
-
-    const std::expected<Matrix4, std::error_code> kMatrix{
-        process::ReadAt<Matrix4>(*kComponent + kComponentWorldMatrix)};
-    if (kMatrix && kMatrix->IsRigid(kUnitTolerance, kAxisTolerance)) {
-      return *kMatrix;
-    }
-  }
-
-  return std::nullopt;
+  return kComponent->transform;
 }
 
 std::expected<RawEntity, std::error_code> ReadEntity(
@@ -523,6 +573,25 @@ std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept {
   }
 
   return ReadAgent(*kAgent, *kKind);
+}
+
+std::optional<Vec3> ReadHeadPosition(std::uintptr_t address) noexcept {
+  const std::optional<RigidComponent> kComponent{FindRigidComponent(address)};
+  if (!kComponent) {
+    return std::nullopt;
+  }
+
+  const std::optional<Vec3> kHead{ReadBonePosition(*kComponent, kHeadBoneKey)};
+  if (!kHead) {
+    return std::nullopt;
+  }
+
+  const std::expected<Matrix4, std::error_code> kBody{ReadWorldMatrix(address)};
+  if (!kBody || (*kHead - kBody->Translation()).Length() > kMaxHeadOffset) {
+    return std::nullopt;
+  }
+
+  return kHead;
 }
 
 }  // namespace afw::games::fc3

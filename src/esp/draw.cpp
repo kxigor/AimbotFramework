@@ -21,6 +21,9 @@ constexpr float kVehicleThickness{2.5F};
 constexpr float kLabelLift{14.0F};
 constexpr std::size_t kLabelChars{64};
 constexpr int kTriangleSides{3};
+constexpr float kHeadHalf{0.13F};
+constexpr float kHeadLift{0.10F};
+constexpr float kHeadThickness{1.0F};
 constexpr float kMarkerRadius{6.0F};
 constexpr float kCrosshairArm{11.0F};
 constexpr float kCrosshairThickness{1.5F};
@@ -32,6 +35,29 @@ void DrawLabel(const games::fc3::EntityInfo& entity, const ScreenRect& rect,
                 static_cast<double>(entity.box.Extent().z));
   ImGui::GetBackgroundDrawList()->AddText(
       ImVec2{rect.left, rect.top - kLabelLift}, colour, label.data());
+}
+
+// The bone sits at the base of the skull, so the cube is lifted to sit around
+// the head rather than under it. Absent on anything the engine does not drive
+// with a pawn agent, which is why nothing here has to ask what the entity is.
+void DrawHeadBox(const games::fc3::EntityInfo& entity,
+                 const Matrix4& projection, const ImVec2& display,
+                 ImU32 colour) {
+  if (!entity.head || !config::Current().espHeadBoxes.load()) {
+    return;
+  }
+
+  const Vec3 kCentre{*entity.head + (entity.transform.Row(2) * kHeadLift)};
+  const std::optional<ScreenRect> kRect{
+      ProjectCube(FrameAt(entity.transform, kCentre), kHeadHalf, projection,
+                  display.x, display.y)};
+  if (!kRect) {
+    return;
+  }
+
+  ImGui::GetBackgroundDrawList()->AddRect(ImVec2{kRect->left, kRect->top},
+                                          ImVec2{kRect->right, kRect->bottom},
+                                          colour, 0.0F, 0, kHeadThickness);
 }
 
 void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
@@ -46,6 +72,7 @@ void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
                                           ImVec2{kRect->right, kRect->bottom},
                                           colour, 0.0F, 0, thickness);
   DrawLabel(entity, *kRect, colour);
+  DrawHeadBox(entity, projection, display, colour);
 }
 
 // The radius comes from the height alone. Taken from the wider side it swung by
