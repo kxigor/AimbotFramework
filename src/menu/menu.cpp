@@ -4,6 +4,7 @@
 
 #include <afw/config/config.hpp>
 #include <afw/menu/menu.hpp>
+#include <atomic>
 
 // NOLINTNEXTLINE(readability-identifier-naming)
 extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd,
@@ -17,7 +18,14 @@ namespace {
 
 constexpr WPARAM kToggleKey{VK_INSERT};
 constexpr float kWidth{300.0F};
-constexpr float kHeight{190.0F};
+constexpr float kHeight{380.0F};
+
+void Toggle(const char* label, std::atomic<bool>& flag) {
+  bool value{flag.load()};
+  if (ImGui::Checkbox(label, &value)) {
+    flag.store(value);
+  }
+}
 
 [[nodiscard]] bool IsInput(UINT message) noexcept {
   switch (message) {
@@ -71,6 +79,17 @@ void Draw() noexcept {
   bool espEnabled{settings.espEnabled.load()};
   if (ImGui::Checkbox("ESP", &espEnabled)) {
     settings.espEnabled.store(espEnabled);
+  }
+
+  if (espEnabled) {
+    ImGui::SeparatorText("show");
+    Toggle("enemies", settings.espEnemies);
+    Toggle("allies", settings.espAllies);
+    Toggle("civilians", settings.espCivilians);
+    Toggle("animals", settings.espAnimals);
+    Toggle("birds", settings.espBirds);
+    Toggle("vehicles", settings.espVehicles);
+    Toggle("props", settings.espProps);
   }
 
   ImGui::SeparatorText("session");

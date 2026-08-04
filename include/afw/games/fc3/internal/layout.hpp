@@ -149,6 +149,10 @@ constexpr std::uintptr_t kAgentIsDead{0x258};
 constexpr std::uintptr_t kAgentArmyMemberState{0x2B0};
 constexpr std::int32_t kArmyMemberStateDead{7};
 constexpr std::uintptr_t kAnimalAgentIsDead{0x1D0C};
+// CAnimalAgentSimple::IsDead at 0x10b7c99b is two instructions long: read the
+// byte, return. Its own offset, because the class descends from CAgent and
+// shares no layout with the other three.
+constexpr std::uintptr_t kSimpleAnimalAgentIsDead{0x178};
 
 constexpr std::uintptr_t kAgentArmy{0x284};
 constexpr std::uintptr_t kAgentFaction{0x290};

@@ -352,7 +352,10 @@ void ReadPawnAgentFields(std::uintptr_t agent, PawnInfo& pawn) noexcept {
 [[nodiscard]] std::optional<PawnInfo> ReadAgent(std::uintptr_t agent,
                                                 AgentKind kind) noexcept {
   if (kind == AgentKind::SimpleAnimal) {
-    return PawnInfo{.kind = kind};
+    return PawnInfo{
+        .kind = kind,
+        .dead = process::ReadAt<std::uint8_t>(agent + kSimpleAnimalAgentIsDead)
+                    .value_or(0) != 0};
   }
 
   const std::uintptr_t kBlock{agent + (kind == AgentKind::Animal

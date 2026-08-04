@@ -1,5 +1,6 @@
 #include <imgui.h>
 
+#include <afw/config/config.hpp>
 #include <afw/esp/internal/classify.hpp>
 #include <afw/esp/internal/draw.hpp>
 #include <afw/esp/projection.hpp>
@@ -81,6 +82,30 @@ void DrawTriangle(const games::fc3::EntityInfo& entity,
       kBoxThickness);
 }
 
+[[nodiscard]] bool Shown(Kind kind) noexcept {
+  const config::Settings& kSettings{config::Current()};
+  switch (kind) {
+    case Kind::Enemy:
+      return kSettings.espEnemies.load();
+    case Kind::Ally:
+      return kSettings.espAllies.load();
+    case Kind::Civilian:
+      return kSettings.espCivilians.load();
+    case Kind::Predator:
+    case Kind::Animal:
+      return kSettings.espAnimals.load();
+    case Kind::Bird:
+      return kSettings.espBirds.load();
+    case Kind::Vehicle:
+      return kSettings.espVehicles.load();
+    case Kind::Prop:
+      return kSettings.espProps.load();
+    case Kind::Self:
+    default:
+      return false;
+  }
+}
+
 void DrawDot(const games::fc3::EntityInfo& entity, const Matrix4& projection,
              const ImVec2& display, ImU32 colour) {
   const std::optional<ScreenPoint> kPoint{WorldToScreen(
@@ -105,7 +130,7 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
     }
 
     const Kind kKind{KindOf(kEntity, kSelf)};
-    if (kKind == Kind::Self) {
+    if (!Shown(kKind)) {
       continue;
     }
 
