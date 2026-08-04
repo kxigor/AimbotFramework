@@ -1,6 +1,7 @@
 #pragma once
 
 #include <afw/math/aabb.hpp>
+#include <afw/math/angle.hpp>
 #include <afw/math/matrix4.hpp>
 #include <afw/math/vec3.hpp>
 #include <cstddef>
@@ -15,6 +16,7 @@ namespace afw::games::fc3 {
 using math::Aabb;
 using math::Matrix4;
 using math::Vec3;
+using math::ViewAngles;
 
 struct CameraBasis {
   Vec3 position{};

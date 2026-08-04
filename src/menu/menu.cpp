@@ -18,13 +18,42 @@ namespace {
 
 constexpr WPARAM kToggleKey{VK_INSERT};
 constexpr float kWidth{300.0F};
-constexpr float kHeight{380.0F};
+constexpr float kHeight{520.0F};
 
 void Toggle(const char* label, std::atomic<bool>& flag) {
   bool value{flag.load()};
   if (ImGui::Checkbox(label, &value)) {
     flag.store(value);
   }
+}
+
+void Slider(const char* label, std::atomic<float>& setting, float lowest,
+            float highest, const char* format) {
+  float value{setting.load()};
+  if (ImGui::SliderFloat(label, &value, lowest, highest, format)) {
+    setting.store(value);
+  }
+}
+
+void ShowAimSettings(config::Settings& settings) {
+  ImGui::SeparatorText("aim");
+
+  bool enabled{settings.aimEnabled.load()};
+  if (ImGui::Checkbox("aim assist (hold mouse 4)", &enabled)) {
+    settings.aimEnabled.store(enabled);
+  }
+  if (!enabled) {
+    return;
+  }
+
+  Toggle("target enemies", settings.aimEnemies);
+  Toggle("target animals", settings.aimAnimals);
+  Slider("smoothing", settings.aimSmoothing, config::kMinAimSmoothing,
+         config::kMaxAimSmoothing, "%.2f");
+  Slider("cone", settings.aimConeDegrees, config::kMinAimCone,
+         config::kMaxAimCone, "%.0f deg");
+  Slider("range", settings.aimRange, config::kMinAimRange, config::kMaxAimRange,
+         "%.0f m");
 }
 
 [[nodiscard]] bool IsInput(UINT message) noexcept {
@@ -92,6 +121,8 @@ void Draw() noexcept {
     Toggle("props", settings.espProps);
     Toggle("head boxes", settings.espHeadBoxes);
   }
+
+  ShowAimSettings(settings);
 
   ImGui::SeparatorText("session");
   ImGui::TextUnformatted("INSERT shows and hides this window");

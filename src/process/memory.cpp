@@ -73,6 +73,39 @@ std::expected<std::uintptr_t, std::error_code> ModuleBase(
   return std::bit_cast<std::uintptr_t>(kModule);
 }
 
+bool IsWritable(LPCVOID address, SIZE_T size) noexcept {
+  if (address == nullptr || size == 0) {
+    return false;
+  }
+
+  const std::uintptr_t kBegin{std::bit_cast<std::uintptr_t>(address)};
+  const std::uintptr_t kEnd{kBegin + size};
+  if (kEnd < kBegin) {
+    return false;
+  }
+
+  MEMORY_BASIC_INFORMATION info{};
+  const SIZE_T kQueried{VirtualQuery(
+      /*lpAddress = */ address,
+      /*lpBuffer  = */ &info,
+      /*dwLength  = */ sizeof(info))};
+  if (kQueried != sizeof(info) || info.State != MEM_COMMIT ||
+      (info.Protect & PAGE_GUARD) != 0) {
+    return false;
+  }
+
+  constexpr DWORD kWritable{PAGE_READWRITE | PAGE_WRITECOPY |
+                            PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY};
+  if ((info.Protect & kWritable) == 0) {
+    return false;
+  }
+
+  const std::uintptr_t kRegionEnd{
+      std::bit_cast<std::uintptr_t>(info.BaseAddress) + info.RegionSize};
+
+  return kEnd <= kRegionEnd;
+}
+
 bool IsReadable(LPCVOID address, SIZE_T size) noexcept {
   if (address == nullptr || size == 0) {
     return false;

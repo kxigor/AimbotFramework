@@ -72,6 +72,12 @@ constexpr float kHumanoidMaxHeight{2.3F};
 constexpr float kHumanoidMaxWidth{1.5F};
 constexpr float kHumanoidFootTolerance{0.4F};
 
+// How closely a candidate's stored angles must reproduce the camera's own
+// forward vector before it is believed to be the camera's. The engine keeps no
+// class for this object, so the identification is that it agrees with a fact
+// read independently of it -- which nothing else can do by accident.
+constexpr float kViewAngleAgreement{0.05F};
+
 constexpr float kMinFov{0.1F};
 constexpr float kMaxFov{3.0F};
 

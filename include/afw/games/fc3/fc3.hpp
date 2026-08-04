@@ -125,6 +125,26 @@ struct EntitySnapshot {
 
 [[nodiscard]] std::expected<CameraBasis, std::error_code> ReadCamera() noexcept;
 
+// A direction turned into the pair the engine steers by. Yaw is measured a
+// quarter turn off atan2 over the world's x and y, which is why this is not
+// just an arctangent at the call site.
+[[nodiscard]] ViewAngles ViewAnglesTo(const Vec3& direction) noexcept;
+
+// The camera rides on the player as a component, and the engine registers no
+// class for it, so it is found by the one thing that cannot happen twice by
+// accident: its stored angles reproduce the camera's own forward vector, which
+// was read without going through it. What comes back is the state object, and
+// the three angle blocks are offsets from there.
+[[nodiscard]] std::optional<std::uintptr_t> FindViewAngles(
+    std::uintptr_t playerEntity, const Vec3& forward) noexcept;
+
+[[nodiscard]] std::optional<ViewAngles> ReadViewAngles(
+    std::uintptr_t state) noexcept;
+
+// Writes every copy the engine keeps. Setting only the one it commits to leaves
+// the next frame reading the old heading back out of the other.
+bool WriteViewAngles(std::uintptr_t state, const ViewAngles& angles) noexcept;
+
 [[nodiscard]] std::expected<Viewport, std::error_code> ReadViewport() noexcept;
 
 }  // namespace afw::games::fc3

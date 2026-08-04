@@ -9,6 +9,7 @@ namespace afw::process {
 enum class Error : std::uint8_t {
   ModuleNotFound = 1,
   NotReadable = 2,
+  NotWritable = 3,
 };
 
 [[nodiscard]] const std::error_category& ErrorCategory();

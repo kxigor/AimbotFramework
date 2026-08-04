@@ -115,6 +115,27 @@ constexpr std::uintptr_t kBonePosePosition{0x80};
 // all three were named without a single name in memory to compare against.
 constexpr std::uint32_t kHeadBoneKey{0x07C159A2};
 
+// The camera the player looks through is one of the player entity's own
+// components: CPlayerCamera::GetCameraPosition at 0x104301a0 reaches the player
+// back through +0x04 -> +0x0C, the same owner handle every component carries.
+// Its state object hangs off +0x24, and three copies of the view angles live
+// inside that. The look update at 0x1047e89c reads kCameraAnglesSource
+// (GetCameraStateB's block at 0x4E0, plus 0xA4), adds the frame's mouse
+// movement, and commits the result to kCameraAnglesCommit (state A at 0x2D0,
+// plus 0xB0). Writing all three is what makes a new heading survive the frame.
+constexpr std::uintptr_t kCameraState{0x24};
+constexpr std::uintptr_t kCameraAnglesA{0x374};
+constexpr std::uintptr_t kCameraAnglesCommit{0x380};
+constexpr std::uintptr_t kCameraAnglesSource{0x584};
+
+// Pitch first, then roll, then yaw. The disassembly of the look update reads
+// the other way round -- the live camera settled it, because the axis it takes
+// from the aim controller's +0x28 turned out to be the vertical one, not the
+// horizontal. Yaw is measured a quarter turn off atan2 over the world's x and
+// y, so converting a direction into one is not just an arctangent.
+constexpr std::uintptr_t kViewAnglePitch{0x00};
+constexpr std::uintptr_t kViewAngleYaw{0x08};
+
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};

@@ -14,6 +14,9 @@ std::string Describe(Error error) {
     case Error::NotReadable:
       return "the address is not readable: it is not committed, the page "
              "denies access, or the read would leave the region";
+    case Error::NotWritable:
+      return "the address is not writable: the page is read-only, guarded, or "
+             "the write would leave the region";
     default:
       return "unknown afw::process error";
   }

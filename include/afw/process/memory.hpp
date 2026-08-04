@@ -17,6 +17,11 @@ namespace afw::process {
 
 [[nodiscard]] bool IsReadable(LPCVOID address, SIZE_T size) noexcept;
 
+// Deliberately uncached, unlike IsReadable. A write happens once a frame at
+// most, so the VirtualQuery costs nothing worth saving, and a stale cache entry
+// here would be a write into a page that has since changed protection.
+[[nodiscard]] bool IsWritable(LPCVOID address, SIZE_T size) noexcept;
+
 void ForgetReadableRegions() noexcept;
 
 // What the region cache cost since the counters were last cleared. A read that
@@ -45,6 +50,20 @@ requires std::is_trivially_copyable_v<T>
   std::memcpy(static_cast<void*>(&value), source, sizeof(T));
 
   return value;
+}
+
+template <typename T>
+requires std::is_trivially_copyable_v<T>
+[[nodiscard]] std::expected<void, std::error_code> WriteAt(
+    std::uintptr_t address, const T& value) noexcept {
+  LPVOID target{std::bit_cast<LPVOID>(address)};
+  if (!IsWritable(target, sizeof(T))) {
+    return std::unexpected{make_error_code(Error::NotWritable)};
+  }
+
+  std::memcpy(target, static_cast<const void*>(&value), sizeof(T));
+
+  return {};
 }
 
 template <typename TargetPointer>
