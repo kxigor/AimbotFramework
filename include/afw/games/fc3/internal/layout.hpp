@@ -115,6 +115,12 @@ constexpr std::uintptr_t kBonePosePosition{0x80};
 // all three were named without a single name in memory to compare against.
 constexpr std::uint32_t kHeadBoneKey{0x07C159A2};
 
+// "Head" is the joint where the skull meets the neck, so the aim lands at the
+// base of the neck rather than in the middle of the head. Measured off a man
+// standing, in metres above his own feet: Neck 1.520, Head 1.634, the top of
+// him 1.80. Stepping on into the skull was tried and taken back out again; what
+// is aimed at is the bone, as it says.
+
 // An animal carries both of these too, which is what makes it aimable at all
 // without guessing at its shape. A live one measured 0.93 tall in its own box,
 // with the box starting at the ground: its spine stood 0.75 up and its head

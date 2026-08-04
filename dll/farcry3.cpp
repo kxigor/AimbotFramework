@@ -54,10 +54,6 @@ void LogAnswer(int query, const games::fc3::TraceAnswer& answer) {
   app::Log(message.data());
 }
 
-// Puts one segment down the camera's own line and then waits for it: the engine
-// defers the walk, so the answer is not there on the next pass and the record
-// has to be asked for again until it is. Runs on the update thread because that
-// is where the game casts its own.
 void ProbeTrace() {
   static std::uint64_t frames{0};
   static std::optional<int> pending;
@@ -151,9 +147,6 @@ constexpr float kDegreesPerRadian{57.2957795F};
   return 0;
 }
 
-// The settings name whole cones, the geometry wants the half-angle off the
-// centre line, so every cone in the menu is halved on its way in. A cone of 360
-// therefore becomes the half turn past which there is nothing left to include.
 [[nodiscard]] float HalfConeRadians(float degrees) noexcept {
   constexpr float kHalf{0.5F};
 
@@ -196,9 +189,6 @@ constexpr float kDegreesPerRadian{57.2957795F};
   }
 }
 
-// Collects whatever the engine has finished and asks again for whatever is due.
-// Runs on the update thread, which is where the game casts its own segments;
-// the assist only ever reads what this leaves behind.
 void UpdateReach() noexcept {
   static std::uint64_t frames{0};
   ++frames;
@@ -220,18 +210,10 @@ void UpdateReach() noexcept {
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    // Only the kinds the assist is set to target. The engine keeps room for a
-    // few dozen answers at a time and spends most of it on the game's own
-    // shots, so asking about everything drawn would push those out. The cost of
-    // that thrift is a surprise: turn a kind off here and it stops being
-    // reported as blocked as well, because nothing is ever asked about it.
     if (!PriorityOf(kEntity, kSelf)) {
       continue;
     }
 
-    // And only the ones the assist could actually settle on. Asking about the
-    // whole map would spend rows on targets that lose on the aim term anyway,
-    // and there are only so many rows to go round.
     const math::Vec3 kPoint{aimbot::AimPoint(kEntity)};
     const math::Vec3 kOffset{kPoint - kCamera->position};
     if (kOffset.Length() > kRange ||
@@ -346,27 +328,28 @@ void SteadyAim() noexcept {
             &games::fc3::IgnoreEmptyMagazine);
 }
 
-void AimAt(std::uintptr_t state, const aimbot::Target& target,
-           const games::fc3::CameraBasis& camera) noexcept {
+[[nodiscard]] std::optional<float> AimAt(
+    std::uintptr_t state, const math::Vec3& point,
+    const games::fc3::CameraBasis& camera) noexcept {
   const std::optional<math::ViewAngles> kCurrent{
       games::fc3::ReadViewAngles(state)};
   if (!kCurrent) {
-    return;
+    return std::nullopt;
   }
 
   const math::ViewAngles kWanted{
-      games::fc3::ViewAnglesTo(target.point - camera.position)};
+      games::fc3::ViewAnglesTo(point - camera.position)};
+  const math::ViewAngles kLeft{aimbot::Difference(*kCurrent, kWanted)};
   const math::ViewAngles kStep{
-      aimbot::Share(aimbot::Difference(*kCurrent, kWanted),
-                    config::Current().aimSmoothing.load())};
+      aimbot::Share(kLeft, config::Current().aimSmoothing.load())};
 
   games::fc3::WriteViewAngles(
       state, math::ViewAngles{.yaw = math::WrapAngle(kCurrent->yaw + kStep.yaw),
                               .pitch = kCurrent->pitch + kStep.pitch});
+
+  return std::hypot(kLeft.yaw - kStep.yaw, kLeft.pitch - kStep.pitch);
 }
 
-// Nothing is clicked unless this process owns the foreground window. Without
-// that check an alt-tab turns the trigger loose on whatever is in front.
 [[nodiscard]] bool OwnWindowHasFocus() noexcept {
   DWORD owner{0};
   if (GetWindowThreadProcessId(GetForegroundWindow(), &owner) == 0) {
@@ -376,14 +359,6 @@ void AimAt(std::uintptr_t state, const aimbot::Target& target,
   return owner == GetCurrentProcessId();
 }
 
-// Cycled rather than held. A rifle fires for as long as the button is down, so
-// holding it would do; a pistol fires once per press and wants the button back
-// up before it will fire again. Simply holding gave one shot and then silence
-// until the aim moved to somebody else, which is the button never coming up.
-//
-// Letting it up for a single frame in five answers both: the rifle loses a
-// frame of a burst it would not notice, and the pistol gets a fresh press a
-// dozen times a second, which is faster than any of them will fire anyway.
 constexpr std::uint64_t kFireCycle{5};
 constexpr std::uint64_t kFireDown{4};
 
@@ -428,9 +403,10 @@ void RunAssist() noexcept {
     return;
   }
 
-  AimAt(kState, *kTarget, *kCamera);
-  HoldFire(kSettings.autoFire.load() && OwnWindowHasFocus() &&
-           kTarget->error <= HalfConeRadians(kSettings.autoFireCone.load()));
+  const std::optional<float> kRest{AimAt(kState, kTarget->point, *kCamera)};
+
+  HoldFire(kSettings.autoFire.load() && OwnWindowHasFocus() && kRest &&
+           *kRest <= HalfConeRadians(kSettings.autoFireCone.load()));
 }
 
 void LogStatus(std::uint64_t frames) {

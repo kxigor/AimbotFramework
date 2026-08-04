@@ -19,9 +19,6 @@ struct Region {
   std::uintptr_t end{};
 };
 
-// Measured live: the entities of one census were spread over 45 distinct
-// regions. Eight slots against that guarantees eviction, so nearly every read
-// paid a VirtualQuery.
 constexpr std::size_t kCacheSlots{64};
 
 [[nodiscard]] std::array<Region, kCacheSlots>& Cache() noexcept {

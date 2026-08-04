@@ -17,8 +17,6 @@ constexpr std::size_t kNearbyRows{8};
 constexpr float kNearbyRange{25.0F};
 constexpr float kMinAimDistance{1.0F};
 
-// Printed where an army or a faction would go when the entity carries no pawn
-// record at all, so an absent field cannot be mistaken for a real value.
 constexpr std::int32_t kNoPawnField{-99};
 
 struct Nearby {
@@ -28,9 +26,6 @@ struct Nearby {
 
 using NearbyRows = std::array<Nearby, kNearbyRows>;
 
-// Prefers a target that carries a pawn record. Standing anywhere near your own
-// weapon, the best angular match is a piece of your own equipment, and the
-// inspector then reports "not a pawn" about a target you never aimed at.
 [[nodiscard]] Nearby UnderCrosshair(const Vec3& eye,
                                     const Vec3& forward) noexcept {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};

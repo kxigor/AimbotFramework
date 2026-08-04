@@ -25,7 +25,6 @@ constexpr std::size_t kLabelChars{64};
 constexpr int kTriangleSides{3};
 constexpr std::uint32_t kBlockedColour{0xFF3030C0};
 constexpr float kHeadHalf{0.13F};
-constexpr float kHeadLift{0.10F};
 constexpr float kHeadThickness{1.0F};
 constexpr float kMarkerRadius{6.0F};
 constexpr float kDegreesPerRadian{57.2957795F};
@@ -43,14 +42,6 @@ void DrawLabel(const games::fc3::EntityInfo& entity, const ScreenRect& rect,
       ImVec2{rect.left, rect.top - kLabelLift}, colour, label.data());
 }
 
-// Where the shot is going, which is the head on a man and the spine on an
-// animal or a bird. Drawing it is worth more on the animals than on the men: a
-// bird's own coordinates are nowhere near its body, so without this there is
-// nothing on screen to say whether the aim is on it or under it.
-//
-// The head bone sits at the base of the skull and needs lifting to surround the
-// head rather than hang beneath it. The spine needs no lifting: it is already
-// inside the body.
 void DrawAimBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
                 const ImVec2& display, ImU32 colour) {
   if (!config::Current().espAimBoxes.load()) {
@@ -62,19 +53,13 @@ void DrawAimBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
     return;
   }
 
-  // A target the engine says a shot would not get to is drawn in its own
-  // colour, so that what the assist is doing about cover can be seen rather
-  // than taken on trust. Only asked once reachability carries weight, because
-  // nothing is asked of the engine before that.
   const ImU32 kInk{(config::Current().aimWeightReach.load() > 0.0F &&
                     games::fc3::ReachOf(entity.address) <= 0.0F)
                        ? kBlockedColour
                        : colour};
 
-  const Vec3 kCentre{
-      entity.head ? *kBone + (entity.transform.Row(2) * kHeadLift) : *kBone};
   const std::optional<ScreenRect> kRect{
-      ProjectCube(FrameAt(entity.transform, kCentre), kHeadHalf, projection,
+      ProjectCube(FrameAt(entity.transform, *kBone), kHeadHalf, projection,
                   display.x, display.y)};
   if (!kRect) {
     return;
@@ -99,9 +84,6 @@ void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
   DrawLabel(entity, *kRect, colour);
 }
 
-// The radius comes from the height alone. Taken from the wider side it swung by
-// half as the animal turned, because a boar's box is far longer than it is
-// tall.
 void DrawRing(const games::fc3::EntityInfo& entity, const Matrix4& projection,
               const ImVec2& display, ImU32 colour) {
   const std::optional<ScreenRect> kRect{
@@ -216,9 +198,6 @@ void DrawAimCone(const ImVec2& display, float verticalFov) {
     return;
   }
 
-  // The setting names the whole cone; the ring is drawn at its half-angle. Past
-  // a quarter turn there is no ring to draw at all -- the cone has opened out
-  // past the screen's own edge and takes in everything on it.
   constexpr float kQuarterTurn{1.57079633F};
 
   const float kCone{kSettings.aimConeDegrees.load() * kHalfF /

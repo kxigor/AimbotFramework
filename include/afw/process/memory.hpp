@@ -17,17 +17,10 @@ namespace afw::process {
 
 [[nodiscard]] bool IsReadable(LPCVOID address, SIZE_T size) noexcept;
 
-// Deliberately uncached, unlike IsReadable. A write happens once a frame at
-// most, so the VirtualQuery costs nothing worth saving, and a stale cache entry
-// here would be a write into a page that has since changed protection.
 [[nodiscard]] bool IsWritable(LPCVOID address, SIZE_T size) noexcept;
 
 void ForgetReadableRegions() noexcept;
 
-// What the region cache cost since the counters were last cleared. A read that
-// misses pays a VirtualQuery, which is why this is worth watching: the game's
-// entities are spread over dozens of regions, and a cache too small to hold
-// them turns every read into a system call on the engine's own thread.
 struct RegionStats {
   std::uint32_t queries{};
   std::uint32_t hits{};

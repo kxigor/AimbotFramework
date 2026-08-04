@@ -104,11 +104,6 @@ struct ClassCacheState {
   return false;
 }
 
-// A class-descriptor getter takes `this` and nothing else, so it ends in a bare
-// RET. Anything ending in RET imm16 wants arguments we are not passing, and
-// calling it hands the callee whatever our stack happens to hold: twice that
-// was a pointer it dereferenced, and twice the game died reading address zero.
-// Jump thunks are followed first, since a vtable slot usually points at one.
 [[nodiscard]] bool TakesOnlyThis(std::uintptr_t function) noexcept {
   std::uintptr_t entry{function};
   for (std::uint32_t hop{0}; hop < kMaxThunkHops; ++hop) {
@@ -395,8 +390,18 @@ struct RigidComponent {
   Matrix4 transform{};
 };
 
+[[nodiscard]] bool CarriesAPose(std::uintptr_t component) noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kBones{
+      process::ReadPointerAs<EnginePtr>(component + kComponentBoneArray)};
+  const std::expected<std::uint32_t, std::error_code> kCount{
+      process::ReadAt<std::uint32_t>(component + kComponentBoneCount)};
+
+  return kBones && kCount && *kBones != 0 && *kCount != 0 &&
+         *kCount <= kMaxBones;
+}
+
 [[nodiscard]] std::optional<RigidComponent> FindRigidComponent(
-    std::uintptr_t address) noexcept {
+    std::uintptr_t address, bool posed) noexcept {
   const std::expected<std::uintptr_t, std::error_code> kArray{
       process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
   const std::expected<std::uint32_t, std::error_code> kCount{
@@ -410,6 +415,9 @@ struct RigidComponent {
         process::ReadPointerAs<EnginePtr>(*kArray +
                                           (index * sizeof(EnginePtr)))};
     if (!kComponent || *kComponent == 0) {
+      continue;
+    }
+    if (posed && !CarriesAPose(*kComponent)) {
       continue;
     }
 
@@ -458,9 +466,6 @@ struct RigidComponent {
   return std::nullopt;
 }
 
-// A bone further from the entity than anything on a body could be belongs to
-// something else: a pose left behind by a skeleton that has since been reused,
-// or an array that is not the one this entity poses through.
 [[nodiscard]] std::optional<Vec3> BoneNear(const RigidComponent& component,
                                            std::uint32_t key,
                                            const Vec3& origin) noexcept {
@@ -511,7 +516,8 @@ std::optional<std::uintptr_t> OwnerOfComponent(
 
 std::optional<Matrix4> ReadComponentWorldMatrix(
     std::uintptr_t address) noexcept {
-  const std::optional<RigidComponent> kComponent{FindRigidComponent(address)};
+  const std::optional<RigidComponent> kComponent{
+      FindRigidComponent(address, false)};
   if (!kComponent) {
     return std::nullopt;
   }
@@ -590,7 +596,8 @@ std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept {
 }
 
 BonePoints ReadBonePoints(std::uintptr_t address) noexcept {
-  const std::optional<RigidComponent> kComponent{FindRigidComponent(address)};
+  const std::optional<RigidComponent> kComponent{
+      FindRigidComponent(address, true)};
   if (!kComponent) {
     return BonePoints{};
   }

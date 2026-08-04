@@ -11,13 +11,6 @@ namespace afw::hook {
 
 constexpr std::size_t kMaxPatchBytes{32};
 
-// Bytes written over the game's own code, and put back when this goes away.
-// Plain overwriting: no trampoline, no relocation, so what goes in has to be
-// the same length as what it replaces and has to stand on its own.
-//
-// Restoring is the whole reason this is a type rather than a memcpy: a patch
-// that outlives the setting that asked for it leaves the game modified with
-// nothing left to explain why.
 class CodePatch {
  public:
   [[nodiscard]] static std::expected<CodePatch, std::error_code> Apply(

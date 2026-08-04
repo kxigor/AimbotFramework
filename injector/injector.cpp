@@ -14,7 +14,6 @@ namespace {
 constexpr PCWSTR kTargetImageName{L"farcry3_d3d11.exe"};
 constexpr PCWSTR kDllName{L"aimbot.dll"};
 
-// Absolute path to the DLL that is staged next to this executable.
 [[nodiscard]] std::filesystem::path ResolveDllPath() {
   std::array<WCHAR, MAX_PATH> exePath{};
   const DWORD kLength{GetModuleFileNameW(

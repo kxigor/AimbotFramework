@@ -29,8 +29,6 @@ namespace {
   return *kCore;
 }
 
-// One table of query records, searched for the one the walk was filed under.
-// What comes back is where that record keeps its hits.
 [[nodiscard]] std::optional<std::uintptr_t> FindRecord(std::uintptr_t core,
                                                        std::uintptr_t table,
                                                        std::uintptr_t counter,
@@ -61,17 +59,6 @@ namespace {
 
 namespace {
 
-// The engine's own convention here is __thiscall: the world in ECX, twelve
-// arguments on the stack, and RET 0x30 to clear them. GCC will not put that
-// attribute on a plain function pointer, so this is spelled as fastcall
-// instead, whose first two arguments land in ECX and EDX and whose rest go on
-// the stack in order -- identical once the EDX slot is written off as a
-// scratch the callee never reads.
-//
-// All twelve stack arguments are spelled out rather than defaulted: the callee
-// clears exactly twelve on its way out, so passing one fewer would leave the
-// stack short by a slot. Their order is the forwarder's own, which drops the
-// first and passes the eleven after it straight through.
 using SegmentQueryFn = int(__attribute__((fastcall)) *)(
     void* world, int scratch, int dropped, int mode, const float* from,
     const float* delta, const void* filter, int zeroA, int four, int zeroB,
@@ -81,13 +68,8 @@ constexpr int kMode{1};
 constexpr int kFour{4};
 constexpr int kOne{1};
 
-// The game itself always asks for the deferred walk, and going off what the
-// game does is the whole reason these arguments are right at all.
 constexpr int kWalkNow{0};
 
-// An object the walk reads two words out of and folds into the mask it tests
-// with. Only those two matter, but the head is filled in as the game fills it
-// so that anything else reaching for the object finds what it expects.
 struct Filter {
   std::uint32_t vtable{};
   std::uint32_t mask{};
@@ -198,11 +180,6 @@ struct Reach {
   return rows;
 }
 
-// The oldest question is the one worth forgetting. Taking rows in turn instead
-// would evict whatever happened to be next, answer and all, and with more
-// targets about than there are rows nothing would ever settle -- every one of
-// them would read as reachable because none of them would keep an answer long
-// enough to be told otherwise.
 [[nodiscard]] Reach& RowFor(std::uintptr_t entity) noexcept {
   Reach* oldest{&Reaches().front()};
   for (Reach& row : Reaches()) {
@@ -219,9 +196,6 @@ struct Reach {
   return *oldest;
 }
 
-// A walk that met nothing got there. So did one whose first hit is the target
-// itself, which is anything landing within kReachSlack of the far end -- the
-// aim point sits inside a body, so the body is struck just short of it.
 [[nodiscard]] bool Reached(const TraceAnswer& answer, const Vec3& eye,
                            float span) noexcept {
   if (answer.hits == 0) {

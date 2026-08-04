@@ -25,9 +25,6 @@ constexpr float kPanelHeight{1180.0F};
 constexpr ImU32 kAheadColour{0xFF00FF00};
 constexpr ImU32 kRightColour{0xFF0080FF};
 
-// Two fixed points in front of the camera. They are the only way to tell a
-// wrong projection from a wrong entity position: whatever the world does, these
-// two must sit at the screen centre and a hand's width to its right.
 struct Markers {
   std::optional<ScreenPoint> ahead;
   std::optional<ScreenPoint> probe;
@@ -54,9 +51,6 @@ void ShowPanelBody(const Vec3& eye, const Vec3& forward, const ImVec2& display,
 
 }  // namespace
 
-// Scaffolding: chain diagnostics, the camera's own numbers, pool and entity
-// counts. Everything the overlay is actually for is drawn without it, which is
-// why it is off unless asked for.
 void ShowPanel(const games::fc3::CameraBasis& camera, const ImVec2& display,
                const Markers& markers) {
   const float kAspect{display.x / display.y};

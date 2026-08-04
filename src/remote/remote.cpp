@@ -1,8 +1,4 @@
 // clang-format off
-// Order pinned by hand: tlhelp32.h is not self-contained -- it has no #include
-// of its own, yet its declarations use DWORD, WCHAR, MAX_PATH and WINAPI.
-// Sorting it alphabetically puts it ahead of windows.h, its structs then fail
-// to parse, and the errors surface far below as "no member named szExeFile".
 #include <windows.h>
 
 #include <tlhelp32.h>
@@ -99,14 +95,6 @@ LocalLoadLibraryRoutine() {
     return std::unexpected{LastError()};
   }
 
-  // kernel32.dll is mapped at the same base in every process of a session, so
-  // the local address of LoadLibraryW is also valid in the target process. Its
-  // signature differs from LPTHREAD_START_ROUTINE, but the two are
-  // ABI-compatible -- one pointer in, a pointer-sized value out -- and that is
-  // what makes the CreateRemoteThread trick work. This one cast is spelled out
-  // rather than routed through core::PointerCast: -Wcast-function-type fires in
-  // the template's body, where a pragma at the call site cannot reach it, and
-  // suppressing it inside the shared helper would silence it for every caller.
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wcast-function-type"
   // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)

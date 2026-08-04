@@ -89,10 +89,6 @@ constexpr std::size_t kBuffers{3};
   return frames;
 }
 
-// The regions the game keeps its entities in outlive a frame by a long way, so
-// dropping the cache every generation only threw away work. Sweeping it now and
-// then is still worth it, because a region that has been unmapped must not stay
-// remembered as readable.
 constexpr std::uint32_t kGenerationsPerRegionSweep{60};
 
 [[nodiscard]] std::uint32_t& GenerationsSinceSweep() noexcept {

@@ -6,7 +6,6 @@ namespace afw::esp {
 
 namespace {
 
-// Packed as 0xAABBGGRR, which is what ImGui expects.
 constexpr std::uint32_t kPropColour{0xC000FF40};
 constexpr std::uint32_t kDeadColour{0x80606060};
 constexpr std::uint32_t kEnemyColour{0xFF3030FF};
