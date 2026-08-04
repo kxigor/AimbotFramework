@@ -142,6 +142,11 @@ constexpr float kMaxFrameSeconds{0.25F};
   return patch;
 }
 
+[[nodiscard]] std::optional<hook::CodePatch>& SwayPatch() noexcept {
+  static std::optional<hook::CodePatch> patch;
+  return patch;
+}
+
 using PatchSource =
     std::expected<hook::CodePatch, std::error_code> (*)() noexcept;
 
@@ -168,6 +173,7 @@ void SteadyAim() noexcept {
             &games::fc3::SuppressRecoil);
   HoldPatch(SpreadPatch(), kSettings.noSpread.load(),
             &games::fc3::SuppressSpread);
+  HoldPatch(SwayPatch(), kSettings.noSway.load(), &games::fc3::SuppressSway);
 }
 
 [[nodiscard]] aimbot::MotionTable& Motion() noexcept {

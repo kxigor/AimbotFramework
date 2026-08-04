@@ -164,6 +164,12 @@ SuppressRecoil() noexcept;
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code>
 SuppressSpread() noexcept;
 
+// Stops breathing drifting the view. Only a scoped weapon sways the camera at
+// all, so this changes nothing in anyone else's hands. Held for as long as the
+// returned patch is alive; letting it go puts the game's own bytes back.
+[[nodiscard]] std::expected<hook::CodePatch, std::error_code>
+SuppressSway() noexcept;
+
 [[nodiscard]] std::expected<Viewport, std::error_code> ReadViewport() noexcept;
 
 }  // namespace afw::games::fc3

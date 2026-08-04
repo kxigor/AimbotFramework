@@ -114,6 +114,19 @@ std::expected<hook::CodePatch, std::error_code> SuppressRecoil() noexcept {
   return hook::CodePatch::Apply(*kSite + kRecoilStorePatchOffset, kSkip);
 }
 
+std::expected<hook::CodePatch, std::error_code> SuppressSway() noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kSite{
+      process::FindPattern(kModuleName, kSwayCopySignature)};
+  if (!kSite) {
+    return std::unexpected{kSite.error()};
+  }
+
+  constexpr std::array<std::uint8_t, 5> kCopyNothing{0x90, 0x90, 0x90, 0x90,
+                                                     0x90};
+
+  return hook::CodePatch::Apply(*kSite + kSwayCopyPatchOffset, kCopyNothing);
+}
+
 std::expected<CameraBasis, std::error_code> ReadCamera() noexcept {
   const Diagnostics kReport{Diagnostics::Read()};
   if (kReport.cameraView == 0) {

@@ -184,6 +184,28 @@ constexpr std::uintptr_t kRecoilStorePatchOffset{0x12};
 constexpr const char* kSpreadReadSignature{"8B 41 48 D9 80 D4 01 00 00 C3"};
 constexpr std::uintptr_t kSpreadReadPatchOffset{0x03};
 
+// Breathing reaches the view only on a weapon whose camera is driven by the
+// weapon's own bone -- bIsCameraBoneUsedFromSway at archetype +0x644, which the
+// game glosses as "Camera sways together with reticule. Sniper behavior". That
+// is why it never showed up in the view angles with anything else in hand: on
+// every other weapon it moves the model through the animation rig and never
+// touches the angles, and since the shot direction is built from the camera's
+// orientation, it does not bend a bullet either.
+//
+// Where it does reach the view, at 0x1032113f, the camera subtracts the offset
+// it applied last frame, refreshes it out of the sway component, and adds the
+// new one back. The refresh is an FLD/FSTP pair inside a three-count loop, so
+// erasing just those two instructions leaves the loop turning over an unchanged
+// offset -- and the same number is then subtracted and added, which is nothing.
+// Skipping the whole branch instead would have stopped the subtraction as well
+// and frozen the last drift into the view for good.
+//
+// The signature runs from the loop counter through the loop's own jump; the
+// five bytes to replace start kSwayCopyPatchOffset in.
+constexpr const char* kSwayCopySignature{
+    "6A 03 8B CB 2B C3 5A D9 04 08 D9 19 83 C1 04 4A 75 F5"};
+constexpr std::uintptr_t kSwayCopyPatchOffset{0x07};
+
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};
