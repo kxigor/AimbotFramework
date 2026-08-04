@@ -46,9 +46,11 @@ struct Limits {
 
 [[nodiscard]] float AngleBetween(const Vec3& lhs, const Vec3& rhs) noexcept;
 
-// The head when the skeleton gave one up, the middle of the box otherwise. The
-// centre is a fallback rather than a choice: it is the only point there is for
-// an entity whose bones could not be read.
+// The head when the skeleton gave one up, then the spine, then the middle of
+// the box. An animal is never given a head, so it is aimed at its spine: its
+// box holds as much leg as body, and the middle of one falls under the belly of
+// a boar rather than in it. The centre is a fallback rather than a choice: it
+// is the only point there is for an entity whose bones could not be read.
 [[nodiscard]] Vec3 AimPoint(const games::fc3::EntityInfo& entity) noexcept;
 
 // Where a point travelling at `velocity` will be once a shot has had time to

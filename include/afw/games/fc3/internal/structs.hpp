@@ -98,6 +98,10 @@ struct EntityInfo {
   // read for entities the engine drives with a pawn agent, and absent when that
   // skeleton has no such bone.
   std::optional<Vec3> head;
+  // The "Spine" bone, in the same space and read under the same conditions. It
+  // is what an animal is aimed at: nothing else on one is both reliably present
+  // and reliably inside the body.
+  std::optional<Vec3> body;
   bool humanoid{};
 };
 

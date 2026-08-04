@@ -115,6 +115,15 @@ constexpr std::uintptr_t kBonePosePosition{0x80};
 // all three were named without a single name in memory to compare against.
 constexpr std::uint32_t kHeadBoneKey{0x07C159A2};
 
+// An animal carries both of these too, which is what makes it aimable at all
+// without guessing at its shape. A live one measured 0.93 tall in its own box,
+// with the box starting at the ground: its spine stood 0.75 up and its head
+// 0.96, while the joints of its legs filled everything from 0.08 to 0.48. The
+// middle of that box is therefore 0.465 -- among the legs, a third of the
+// animal's height below the body, which is why aiming at a box centre shoots
+// under a boar. The spine is where the animal actually is.
+constexpr std::uint32_t kSpineBoneKey{0x530EC1CB};
+
 // The camera the player looks through is one of the player entity's own
 // components: CPlayerCamera::GetCameraPosition at 0x104301a0 reaches the player
 // back through +0x04 -> +0x0C, the same owner handle every component carries.

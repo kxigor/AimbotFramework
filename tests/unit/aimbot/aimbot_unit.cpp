@@ -137,6 +137,24 @@ TEST(AimbotAimPoint, FallsBackToTheMiddleOfTheBox) {
   EXPECT_FLOAT_EQ(AimPoint(kEntity).z, 0.9F);
 }
 
+// An animal is never given a head, so the spine is what it comes down to. A
+// measured one stood 0.93 tall with its spine at 0.75 and the joints of its
+// legs from 0.08 to 0.48, which puts the middle of its box under the belly.
+TEST(AimbotAimPoint, AimsAtTheSpineWhenThereIsNoHead) {
+  EntityInfo entity{At(1, Vec3{.x = 5.0F, .y = 0.0F, .z = 0.0F})};
+  entity.body = Vec3{.x = 5.0F, .y = 0.0F, .z = 0.75F};
+
+  EXPECT_FLOAT_EQ(AimPoint(entity).z, 0.75F);
+}
+
+TEST(AimbotAimPoint, KeepsTheHeadWhenTheSkeletonGaveUpBoth) {
+  EntityInfo entity{At(1, Vec3{.x = 5.0F, .y = 0.0F, .z = 0.0F})};
+  entity.head = Vec3{.x = 5.0F, .y = 0.0F, .z = 1.6F};
+  entity.body = Vec3{.x = 5.0F, .y = 0.0F, .z = 1.0F};
+
+  EXPECT_FLOAT_EQ(AimPoint(entity).z, 1.6F);
+}
+
 TEST(AimbotLead, PutsTheAimWhereTheTargetWillBe) {
   const Vec3 kPoint{.x = 10.0F, .y = 0.0F, .z = 1.6F};
   const Vec3 kWalking{.x = 0.0F, .y = 4.0F, .z = 0.0F};

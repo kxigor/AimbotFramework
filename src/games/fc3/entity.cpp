@@ -458,6 +458,20 @@ struct RigidComponent {
   return std::nullopt;
 }
 
+// A bone further from the entity than anything on a body could be belongs to
+// something else: a pose left behind by a skeleton that has since been reused,
+// or an array that is not the one this entity poses through.
+[[nodiscard]] std::optional<Vec3> BoneNear(const RigidComponent& component,
+                                           std::uint32_t key,
+                                           const Vec3& origin) noexcept {
+  const std::optional<Vec3> kBone{ReadBonePosition(component, key)};
+  if (!kBone || (*kBone - origin).Length() > kMaxHeadOffset) {
+    return std::nullopt;
+  }
+
+  return kBone;
+}
+
 [[nodiscard]] bool IsHumanoid(const Aabb& box) noexcept {
   return box.max.z > kHumanoidMinHeight && box.max.z < kHumanoidMaxHeight &&
          std::fabs(box.min.z) < kHumanoidFootTolerance &&
@@ -575,23 +589,16 @@ std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept {
   return ReadAgent(*kAgent, *kKind);
 }
 
-std::optional<Vec3> ReadHeadPosition(std::uintptr_t address) noexcept {
+BonePoints ReadBonePoints(std::uintptr_t address) noexcept {
   const std::optional<RigidComponent> kComponent{FindRigidComponent(address)};
   if (!kComponent) {
-    return std::nullopt;
+    return BonePoints{};
   }
 
-  const std::optional<Vec3> kHead{ReadBonePosition(*kComponent, kHeadBoneKey)};
-  if (!kHead) {
-    return std::nullopt;
-  }
+  const Vec3 kOrigin{kComponent->transform.Translation()};
 
-  const std::expected<Matrix4, std::error_code> kBody{ReadWorldMatrix(address)};
-  if (!kBody || (*kHead - kBody->Translation()).Length() > kMaxHeadOffset) {
-    return std::nullopt;
-  }
-
-  return kHead;
+  return BonePoints{.head = BoneNear(*kComponent, kHeadBoneKey, kOrigin),
+                    .body = BoneNear(*kComponent, kSpineBoneKey, kOrigin)};
 }
 
 }  // namespace afw::games::fc3

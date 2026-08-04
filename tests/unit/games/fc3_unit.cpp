@@ -634,7 +634,7 @@ class Fc3HeadBoneUnit : public Fc3ComponentUnit {
 };
 
 TEST_F(Fc3HeadBoneUnit, PlacesTheHeadBoneInTheWorld) {
-  const auto kHead{afw::games::fc3::ReadHeadPosition(At(kEntity))};
+  const auto kHead{afw::games::fc3::ReadBonePoints(At(kEntity)).head};
 
   ASSERT_TRUE(kHead.has_value());
   EXPECT_FLOAT_EQ(kHead->x, 7.02F);
@@ -647,7 +647,7 @@ TEST_F(Fc3HeadBoneUnit, PlacesTheHeadBoneInTheWorld) {
 TEST_F(Fc3HeadBoneUnit, FindsNothingWhenTheSkeletonHasNoHead) {
   PokeBone(kHeadSlot, 0x33333333, 0.0F, 0.0F, 1.5F);
 
-  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
+  EXPECT_FALSE(afw::games::fc3::ReadBonePoints(At(kEntity)).head.has_value());
 }
 
 // A head that lands a world away came from a matrix belonging to something
@@ -655,13 +655,38 @@ TEST_F(Fc3HeadBoneUnit, FindsNothingWhenTheSkeletonHasNoHead) {
 TEST_F(Fc3HeadBoneUnit, RefusesAHeadTooFarFromItsOwnBody) {
   PokeBone(kHeadSlot, afw::games::fc3::kHeadBoneKey, 0.0F, 0.0F, 40.0F);
 
-  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
+  EXPECT_FALSE(afw::games::fc3::ReadBonePoints(At(kEntity)).head.has_value());
+}
+
+// The spine comes out of the same walk as the head, and an animal is read for
+// it alone: nothing else on one is both reliably present and inside the body.
+TEST_F(Fc3HeadBoneUnit, PlacesTheSpineBoneInTheWorld) {
+  PokeBone(1, afw::games::fc3::kSpineBoneKey, 0.0F, 0.0F, 0.75F);
+
+  const auto kBones{afw::games::fc3::ReadBonePoints(At(kEntity))};
+
+  ASSERT_TRUE(kBones.body.has_value());
+  EXPECT_FLOAT_EQ(kBones.body->z, 9.75F);
+  EXPECT_TRUE(kBones.head.has_value());
+}
+
+// An animal has a spine and no head bone under that name, and must still come
+// back with the half that exists rather than with nothing at all.
+TEST_F(Fc3HeadBoneUnit, KeepsTheSpineWhenThereIsNoHead) {
+  PokeBone(1, afw::games::fc3::kSpineBoneKey, 0.0F, 0.0F, 0.75F);
+  PokeBone(kHeadSlot, 0x33333333, 0.0F, 0.0F, 1.5F);
+
+  const auto kBones{afw::games::fc3::ReadBonePoints(At(kEntity))};
+
+  EXPECT_FALSE(kBones.head.has_value());
+  ASSERT_TRUE(kBones.body.has_value());
+  EXPECT_FLOAT_EQ(kBones.body->z, 9.75F);
 }
 
 TEST_F(Fc3HeadBoneUnit, RefusesAnImplausibleBoneCount) {
   Poke(kComponentTwo + kComponentBoneCount, 100000);
 
-  EXPECT_FALSE(afw::games::fc3::ReadHeadPosition(At(kEntity)).has_value());
+  EXPECT_FALSE(afw::games::fc3::ReadBonePoints(At(kEntity)).head.has_value());
 }
 
 TEST_F(Fc3CensusUnit, AnImplausibleGroupCountIsCapped) {

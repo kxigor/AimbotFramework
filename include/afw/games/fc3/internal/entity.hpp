@@ -71,10 +71,17 @@ struct RawEntity {
 // calling once the shape says the object is large enough to have them.
 [[nodiscard]] std::optional<PawnInfo> ReadPawn(std::uintptr_t address) noexcept;
 
-// Where the skeleton's "Head" bone stands, in world space. Costs a walk of the
-// entity's components, so it is asked only of what the engine drives with a
-// pawn agent rather than of every entity in the world.
-[[nodiscard]] std::optional<Vec3> ReadHeadPosition(
-    std::uintptr_t address) noexcept;
+// Where the skeleton's "Head" and "Spine" bones stand, in world space. Either
+// is absent when this skeleton has no such bone. Both come out of one walk
+// because finding the component that carries the pose is the expensive half and
+// the second bone is then only another pass over an array already in hand.
+struct BonePoints {
+  std::optional<Vec3> head;
+  std::optional<Vec3> body;
+};
+
+// Costs a walk of the entity's components, so it is asked only of what the
+// engine drives with a pawn agent rather than of every entity in the world.
+[[nodiscard]] BonePoints ReadBonePoints(std::uintptr_t address) noexcept;
 
 }  // namespace afw::games::fc3
