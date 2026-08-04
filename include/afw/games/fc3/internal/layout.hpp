@@ -161,6 +161,29 @@ constexpr const char* kRecoilStoreSignature{
     "50 8D 4E 78 F3 0F 11 55 E0 F3 0F 11 45 CC C6 45 D0 01 E8 ?? ?? ?? ??"};
 constexpr std::uintptr_t kRecoilStorePatchOffset{0x12};
 
+// Every bullet that is not a shotgun pellet leaves along the direction
+// CWeaponFireStrategy works out at 0x1051d7bd, and the last thing done to that
+// direction is the spread: one random raised to a grouping exponent gives a
+// magnitude, a second random over a full turn gives an angle, and the polar
+// offset they make is turned into a rotation and multiplied into the aim
+// matrix. The magnitude is scaled by the weapon's current spread, which is the
+// controller's CurrentBulletSpread at +0x1D4 -- the game names it itself, in
+// the property registration at 0x104168a6.
+//
+// The accessor at 0x10415783 is the only way that field reaches the direction,
+// so an FLDZ in place of its FLD hands every caller a zero and the offset
+// collapses to nothing. Freezing the field instead would have left it stuck at
+// whatever it held when the patch went on, which is not zero after a burst.
+//
+// The accessor that follows opens with the same three bytes over +0x1D8, so the
+// signature has to reach through the displacement to the return to be the only
+// one in the image. The bytes to replace start kSpreadReadPatchOffset in.
+//
+// Shotguns are not touched: bUseAngleSpread at archetype +0x2A4 sends them down
+// the other branch, which spreads by its own pitch and yaw angles instead.
+constexpr const char* kSpreadReadSignature{"8B 41 48 D9 80 D4 01 00 00 C3"};
+constexpr std::uintptr_t kSpreadReadPatchOffset{0x03};
+
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};

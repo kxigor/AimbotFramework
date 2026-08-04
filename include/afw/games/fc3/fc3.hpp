@@ -158,6 +158,12 @@ bool WriteViewAngles(std::uintptr_t state, const ViewAngles& angles) noexcept;
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code>
 SuppressRecoil() noexcept;
 
+// Stops the shot direction bending by the weapon's current spread. Shotguns
+// spread by a different mechanism and keep theirs. Held for as long as the
+// returned patch is alive; letting it go puts the game's own bytes back.
+[[nodiscard]] std::expected<hook::CodePatch, std::error_code>
+SuppressSpread() noexcept;
+
 [[nodiscard]] std::expected<Viewport, std::error_code> ReadViewport() noexcept;
 
 }  // namespace afw::games::fc3

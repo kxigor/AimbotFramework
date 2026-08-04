@@ -137,22 +137,37 @@ constexpr float kMaxFrameSeconds{0.25F};
   return patch;
 }
 
-void SteadyAim() noexcept {
-  const bool kWanted{config::Current().noRecoil.load()};
-  if (kWanted == RecoilPatch().has_value()) {
+[[nodiscard]] std::optional<hook::CodePatch>& SpreadPatch() noexcept {
+  static std::optional<hook::CodePatch> patch;
+  return patch;
+}
+
+using PatchSource =
+    std::expected<hook::CodePatch, std::error_code> (*)() noexcept;
+
+void HoldPatch(std::optional<hook::CodePatch>& patch, bool wanted,
+               PatchSource source) noexcept {
+  if (wanted == patch.has_value()) {
     return;
   }
 
-  if (!kWanted) {
-    RecoilPatch().reset();
+  if (!wanted) {
+    patch.reset();
     return;
   }
 
-  std::expected<hook::CodePatch, std::error_code> applied{
-      games::fc3::SuppressRecoil()};
+  std::expected<hook::CodePatch, std::error_code> applied{source()};
   if (applied) {
-    RecoilPatch().emplace(std::move(*applied));
+    patch.emplace(std::move(*applied));
   }
+}
+
+void SteadyAim() noexcept {
+  const config::Settings& kSettings{config::Current()};
+  HoldPatch(RecoilPatch(), kSettings.noRecoil.load(),
+            &games::fc3::SuppressRecoil);
+  HoldPatch(SpreadPatch(), kSettings.noSpread.load(),
+            &games::fc3::SuppressSpread);
 }
 
 [[nodiscard]] aimbot::MotionTable& Motion() noexcept {
