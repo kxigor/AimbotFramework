@@ -89,6 +89,17 @@ constexpr std::size_t kBuffers{3};
   return frames;
 }
 
+// The regions the game keeps its entities in outlive a frame by a long way, so
+// dropping the cache every generation only threw away work. Sweeping it now and
+// then is still worth it, because a region that has been unmapped must not stay
+// remembered as readable.
+constexpr std::uint32_t kGenerationsPerRegionSweep{60};
+
+[[nodiscard]] std::uint32_t& GenerationsSinceSweep() noexcept {
+  static std::uint32_t generations{0};
+  return generations;
+}
+
 void BeginGeneration() noexcept {
   WritingIndex() =
       ReadySlot().exchange(WritingIndex(), std::memory_order_acq_rel);
@@ -99,7 +110,15 @@ void BeginGeneration() noexcept {
   fresh.snapshot.ForgetCounts();
 
   Seen().fill(0);
-  process::ForgetReadableRegions();
+  process::ForgetRegionStats();
+
+  if (GenerationsSinceSweep() >= kGenerationsPerRegionSweep) {
+    GenerationsSinceSweep() = 0;
+    process::ForgetReadableRegions();
+    return;
+  }
+
+  ++GenerationsSinceSweep();
 }
 
 const hook::Hook*& BoundUpdate() noexcept {
@@ -129,7 +148,6 @@ void AcceptEntity(std::uintptr_t address, EntitySnapshot& snapshot,
   snapshot.CountByType(typeBit, true);
 
   classified->pawn = ReadPawn(address);
-  classified->identity = ReadIdentity(address);
 
   snapshot.items.at(snapshot.count) = *classified;
   ++snapshot.count;
@@ -245,6 +263,11 @@ void TakeCensus(std::uintptr_t scheduler) noexcept {
     ++census.groups;
     census.entities += kEntities;
   }
+
+  EntitySnapshot& snapshot{Buffers().at(WritingIndex()).snapshot};
+  const process::RegionStats kStats{process::ReadableRegionStats()};
+  snapshot.regionQueries = kStats.queries;
+  snapshot.regionHits = kStats.hits;
 }
 
 void PublishCensus() noexcept {

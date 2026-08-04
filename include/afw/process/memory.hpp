@@ -19,6 +19,19 @@ namespace afw::process {
 
 void ForgetReadableRegions() noexcept;
 
+// What the region cache cost since the counters were last cleared. A read that
+// misses pays a VirtualQuery, which is why this is worth watching: the game's
+// entities are spread over dozens of regions, and a cache too small to hold
+// them turns every read into a system call on the engine's own thread.
+struct RegionStats {
+  std::uint32_t queries{};
+  std::uint32_t hits{};
+};
+
+[[nodiscard]] RegionStats ReadableRegionStats() noexcept;
+
+void ForgetRegionStats() noexcept;
+
 template <typename T>
 requires std::is_trivially_copyable_v<T>
 [[nodiscard]] std::expected<T, std::error_code> ReadAt(

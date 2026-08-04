@@ -78,13 +78,6 @@ constexpr std::uintptr_t kEntityComponentCount{0x8C};
 constexpr std::uintptr_t kComponentOwnerHandle{0x04};
 constexpr std::uintptr_t kHandleEntity{0x0C};
 
-// Archetype identity, named by the constructor at 0x1018c32e. Both fields read
-// -1 on a character, so they identify placed objects only. A Ghidra address:
-// module-relative, so it survives a restart.
-constexpr std::uintptr_t kIdentityComponentVtable{0x114ED1A0};
-constexpr std::uintptr_t kIdentityClassIndex{0x20};
-constexpr std::uintptr_t kIdentityClassHash{0x24};
-
 // Byte offset, confirmed at 0x11336d60 (ADD EDI,0x100); the decompiler renders
 // it as +0x40 because it is pointer arithmetic on the component type. Which
 // component the engine picks is decided by a class hash it obtains through a

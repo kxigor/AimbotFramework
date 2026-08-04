@@ -60,11 +60,6 @@ struct RawEntity {
 [[nodiscard]] std::optional<std::uintptr_t> OwnerOfComponent(
     std::uintptr_t address) noexcept;
 
-// Absent when the entity carries no identity component, which is the honest
-// answer rather than a guess: nothing downstream should fall back to shape.
-[[nodiscard]] std::optional<EntityIdentity> ReadIdentity(
-    std::uintptr_t address) noexcept;
-
 [[nodiscard]] std::expected<RawEntity, std::error_code> ReadEntity(
     std::uintptr_t address) noexcept;
 

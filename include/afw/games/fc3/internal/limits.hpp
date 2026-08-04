@@ -24,6 +24,16 @@ constexpr std::uintptr_t kMaxModuleSpan{0x4000000};
 // rather than once per object.
 constexpr std::size_t kClassCacheSlots{256};
 
+// What a class-descriptor getter is allowed to look like before we call it.
+// Every real one is a handful of instructions ending in a bare RET; a window
+// this wide covers them and still stops well short of anything substantial.
+constexpr std::uint32_t kGetterScanBytes{128};
+constexpr std::uint32_t kMaxThunkHops{4};
+constexpr std::uint8_t kRelativeJump{0xE9};
+constexpr std::uint8_t kReturn{0xC3};
+constexpr std::uint8_t kReturnWithOperand{0xC2};
+constexpr std::uintptr_t kRelativeJumpSize{5};
+
 // The names come from the enum CBasePawnEntity_RegisterProperties at 0x10bdcac2
 // registers alongside the field: BlueGuys, RedGuys, GreyGuys, NeutralGuys,
 // GreenGuys, YellowGuys.
@@ -34,11 +44,6 @@ constexpr std::uint32_t kMaxAgentType{3};
 constexpr std::int32_t kMaxFaction{3};
 // A live civilian read -2 here, so the range starts below zero.
 constexpr std::int32_t kNoFaction{-2};
-
-// What the identity component holds before an archetype is assigned. Seeded
-// from g_DefaultEntityClassHash by the constructor at 0x1018c32e, and a
-// character keeps it, so a record carrying this value says nothing at all.
-constexpr std::uint32_t kNoArchetype{0xFFFFFFFF};
 
 // Loose on purpose: the engine stores already normalised vectors, and garbage
 // misses by orders rather than by hundredths.

@@ -74,6 +74,8 @@ struct EntitySnapshot {
     unreadable = 0;
     foreignClass = 0;
     viaComponent = 0;
+    regionQueries = 0;
+    regionHits = 0;
     rejected.fill(0);
     sampled = 0;
     notRigidSample.fill(0);
@@ -107,6 +109,8 @@ struct EntitySnapshot {
   std::uint32_t unreadable{};
   std::uint32_t foreignClass{};
   std::uint32_t viaComponent{};
+  std::uint32_t regionQueries{};
+  std::uint32_t regionHits{};
   std::array<std::uint32_t, kRejectionCount> rejected{};
   std::uint32_t sampled{};
   std::array<std::uintptr_t, kRejectedSamples> notRigidSample{};

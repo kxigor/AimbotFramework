@@ -84,13 +84,6 @@ struct PawnInfo {
   bool dead{};
 };
 
-// Archetype identity. The vtable cannot stand in for it: a car and a pirate
-// share one.
-struct EntityIdentity {
-  std::uint32_t classIndex{};
-  std::uint32_t classHash{};
-};
-
 struct EntityInfo {
   std::uintptr_t address{};
   std::uintptr_t vtable{};
@@ -99,7 +92,6 @@ struct EntityInfo {
   Matrix4 transform{};
   Aabb box{};
   std::optional<PawnInfo> pawn;
-  std::optional<EntityIdentity> identity;
   bool humanoid{};
 };
 

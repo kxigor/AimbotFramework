@@ -8,6 +8,11 @@
 
 add_library(afw_esp STATIC
   projection.cpp
+  classify.cpp
+  draw.cpp
+  panel_world.cpp
+  panel_entities.cpp
+  panel_pools.cpp
   esp.cpp
 )
 add_library(afw::esp ALIAS afw_esp)

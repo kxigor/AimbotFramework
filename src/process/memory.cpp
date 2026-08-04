@@ -19,7 +19,10 @@ struct Region {
   std::uintptr_t end{};
 };
 
-constexpr std::size_t kCacheSlots{8};
+// Measured live: the entities of one census were spread over 45 distinct
+// regions. Eight slots against that guarantees eviction, so nearly every read
+// paid a VirtualQuery.
+constexpr std::size_t kCacheSlots{64};
 
 [[nodiscard]] std::array<Region, kCacheSlots>& Cache() noexcept {
   thread_local std::array<Region, kCacheSlots> cache{};
@@ -29,6 +32,11 @@ constexpr std::size_t kCacheSlots{8};
 [[nodiscard]] std::size_t& NextSlot() noexcept {
   thread_local std::size_t slot{0};
   return slot;
+}
+
+[[nodiscard]] RegionStats& Stats() noexcept {
+  thread_local RegionStats stats{};
+  return stats;
 }
 
 [[nodiscard]] bool CoveredByCache(std::uintptr_t begin,
@@ -49,6 +57,10 @@ void ForgetReadableRegions() noexcept {
   Cache().fill(Region{});
   NextSlot() = 0;
 }
+
+RegionStats ReadableRegionStats() noexcept { return Stats(); }
+
+void ForgetRegionStats() noexcept { Stats() = RegionStats{}; }
 
 std::expected<std::uintptr_t, std::error_code> ModuleBase(
     PCWSTR name) noexcept {
@@ -72,8 +84,11 @@ bool IsReadable(LPCVOID address, SIZE_T size) noexcept {
     return false;
   }
   if (CoveredByCache(kBegin, kEnd)) {
+    ++Stats().hits;
     return true;
   }
+
+  ++Stats().queries;
 
   MEMORY_BASIC_INFORMATION info{};
   const SIZE_T kQueried{VirtualQuery(

@@ -104,6 +104,45 @@ struct ClassCacheState {
   return false;
 }
 
+// A class-descriptor getter takes `this` and nothing else, so it ends in a bare
+// RET. Anything ending in RET imm16 wants arguments we are not passing, and
+// calling it hands the callee whatever our stack happens to hold: twice that
+// was a pointer it dereferenced, and twice the game died reading address zero.
+// Jump thunks are followed first, since a vtable slot usually points at one.
+[[nodiscard]] bool TakesOnlyThis(std::uintptr_t function) noexcept {
+  std::uintptr_t entry{function};
+  for (std::uint32_t hop{0}; hop < kMaxThunkHops; ++hop) {
+    const std::expected<std::uint8_t, std::error_code> kOpcode{
+        process::ReadAt<std::uint8_t>(entry)};
+    if (!kOpcode || *kOpcode != kRelativeJump) {
+      break;
+    }
+
+    const std::expected<std::int32_t, std::error_code> kOffset{
+        process::ReadAt<std::int32_t>(entry + 1)};
+    if (!kOffset) {
+      return false;
+    }
+    entry = entry + kRelativeJumpSize + static_cast<std::uintptr_t>(*kOffset);
+  }
+
+  for (std::uint32_t step{0}; step < kGetterScanBytes; ++step) {
+    const std::expected<std::uint8_t, std::error_code> kByte{
+        process::ReadAt<std::uint8_t>(entry + step)};
+    if (!kByte) {
+      return false;
+    }
+    if (*kByte == kReturnWithOperand) {
+      return false;
+    }
+    if (*kByte == kReturn) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 [[nodiscard]] std::optional<bool> AskTheEngine(
     std::uintptr_t address, std::uintptr_t vtable,
     std::uintptr_t classDef) noexcept {
@@ -125,6 +164,9 @@ struct ClassCacheState {
       process::ReadPointerAs<EnginePtr>(
           vtable + (kClassDescriptorSlot * sizeof(EnginePtr)))};
   if (!kSlot || *kSlot < kBase || *kSlot >= kBase + kMaxModuleSpan) {
+    return false;
+  }
+  if (!TakesOnlyThis(*kSlot)) {
     return false;
   }
 
@@ -360,48 +402,6 @@ bool IsEntityClass(std::uintptr_t address) noexcept {
 
 bool IsPawnClass(std::uintptr_t address) noexcept {
   return IsOfClass(address, kPawnClassDef, PawnCache());
-}
-
-std::optional<EntityIdentity> ReadIdentity(std::uintptr_t address) noexcept {
-  const std::uintptr_t kWanted{Resolve(kIdentityComponentVtable)};
-  if (kWanted == 0) {
-    return std::nullopt;
-  }
-
-  const std::expected<std::uintptr_t, std::error_code> kArray{
-      process::ReadPointerAs<EnginePtr>(address + kEntityComponentArray)};
-  const std::expected<std::uint32_t, std::error_code> kCount{
-      process::ReadAt<std::uint32_t>(address + kEntityComponentCount)};
-  if (!kArray || !kCount || *kArray == 0 || *kCount > kMaxComponents) {
-    return std::nullopt;
-  }
-
-  for (std::uint32_t index{0}; index < *kCount; ++index) {
-    const std::expected<std::uintptr_t, std::error_code> kComponent{
-        process::ReadPointerAs<EnginePtr>(*kArray +
-                                          (index * sizeof(EnginePtr)))};
-    if (!kComponent || *kComponent == 0) {
-      continue;
-    }
-
-    const std::expected<std::uintptr_t, std::error_code> kVtable{
-        process::ReadPointerAs<EnginePtr>(*kComponent)};
-    if (!kVtable || *kVtable != kWanted) {
-      continue;
-    }
-
-    const std::expected<std::uint32_t, std::error_code> kClassIndex{
-        process::ReadAt<std::uint32_t>(*kComponent + kIdentityClassIndex)};
-    const std::expected<std::uint32_t, std::error_code> kClassHash{
-        process::ReadAt<std::uint32_t>(*kComponent + kIdentityClassHash)};
-    if (!kClassIndex || !kClassHash || *kClassHash == kNoArchetype) {
-      return std::nullopt;
-    }
-
-    return EntityIdentity{.classIndex = *kClassIndex, .classHash = *kClassHash};
-  }
-
-  return std::nullopt;
 }
 
 std::optional<std::uintptr_t> OwnerOfComponent(
