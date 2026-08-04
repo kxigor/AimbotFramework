@@ -596,9 +596,16 @@ BonePoints ReadBonePoints(std::uintptr_t address) noexcept {
   }
 
   const Vec3 kOrigin{kComponent->transform.Translation()};
+  const std::optional<Vec3> kHead{BoneNear(*kComponent, kHeadBoneKey, kOrigin)};
+  std::optional<Vec3> body{BoneNear(*kComponent, kSpineBoneKey, kOrigin)};
+  if (!body) {
+    body = BoneNear(*kComponent, kSpineOneBoneKey, kOrigin);
+  }
+  if (!body) {
+    body = kHead;
+  }
 
-  return BonePoints{.head = BoneNear(*kComponent, kHeadBoneKey, kOrigin),
-                    .body = BoneNear(*kComponent, kSpineBoneKey, kOrigin)};
+  return BonePoints{.head = kHead, .body = body};
 }
 
 }  // namespace afw::games::fc3

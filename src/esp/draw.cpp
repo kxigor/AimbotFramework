@@ -42,17 +42,27 @@ void DrawLabel(const games::fc3::EntityInfo& entity, const ScreenRect& rect,
       ImVec2{rect.left, rect.top - kLabelLift}, colour, label.data());
 }
 
-// The bone sits at the base of the skull, so the cube is lifted to sit around
-// the head rather than under it. Absent on anything the engine does not drive
-// with a pawn agent, which is why nothing here has to ask what the entity is.
-void DrawHeadBox(const games::fc3::EntityInfo& entity,
-                 const Matrix4& projection, const ImVec2& display,
-                 ImU32 colour) {
-  if (!entity.head || !config::Current().espHeadBoxes.load()) {
+// Where the shot is going, which is the head on a man and the spine on an
+// animal or a bird. Drawing it is worth more on the animals than on the men: a
+// bird's own coordinates are nowhere near its body, so without this there is
+// nothing on screen to say whether the aim is on it or under it.
+//
+// The head bone sits at the base of the skull and needs lifting to surround the
+// head rather than hang beneath it. The spine needs no lifting: it is already
+// inside the body.
+void DrawAimBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
+                const ImVec2& display, ImU32 colour) {
+  if (!config::Current().espAimBoxes.load()) {
     return;
   }
 
-  const Vec3 kCentre{*entity.head + (entity.transform.Row(2) * kHeadLift)};
+  const std::optional<Vec3> kBone{entity.head ? entity.head : entity.body};
+  if (!kBone) {
+    return;
+  }
+
+  const Vec3 kCentre{
+      entity.head ? *kBone + (entity.transform.Row(2) * kHeadLift) : *kBone};
   const std::optional<ScreenRect> kRect{
       ProjectCube(FrameAt(entity.transform, kCentre), kHeadHalf, projection,
                   display.x, display.y)};
@@ -77,7 +87,6 @@ void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
                                           ImVec2{kRect->right, kRect->bottom},
                                           colour, 0.0F, 0, thickness);
   DrawLabel(entity, *kRect, colour);
-  DrawHeadBox(entity, projection, display, colour);
 }
 
 // The radius comes from the height alone. Taken from the wider side it swung by
@@ -167,21 +176,21 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
     }
 
     const ImU32 kColour{ColourOf(kEntity, kKind)};
-    if (kKind == Kind::Bird) {
-      DrawTriangle(kEntity, projection, display, kColour);
-      continue;
-    }
-    if (kKind == Kind::Animal || kKind == Kind::Predator) {
-      DrawRing(kEntity, projection, display, kColour);
-      continue;
-    }
     if (kKind == Kind::Prop) {
       DrawDot(kEntity, projection, display, kColour);
       continue;
     }
 
-    DrawBox(kEntity, projection, display, kColour,
-            kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
+    if (kKind == Kind::Bird) {
+      DrawTriangle(kEntity, projection, display, kColour);
+    } else if (kKind == Kind::Animal || kKind == Kind::Predator) {
+      DrawRing(kEntity, projection, display, kColour);
+    } else {
+      DrawBox(kEntity, projection, display, kColour,
+              kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
+    }
+
+    DrawAimBox(kEntity, projection, display, kColour);
   }
 }
 
@@ -197,7 +206,17 @@ void DrawAimCone(const ImVec2& display, float verticalFov) {
     return;
   }
 
-  const float kCone{kSettings.aimConeDegrees.load() / kDegreesPerRadian};
+  // The setting names the whole cone; the ring is drawn at its half-angle. Past
+  // a quarter turn there is no ring to draw at all -- the cone has opened out
+  // past the screen's own edge and takes in everything on it.
+  constexpr float kQuarterTurn{1.57079633F};
+
+  const float kCone{kSettings.aimConeDegrees.load() * kHalfF /
+                    kDegreesPerRadian};
+  if (kCone >= kQuarterTurn) {
+    return;
+  }
+
   const float kRadius{display.y * kHalfF * std::tan(kCone) / kEdge};
   if (!std::isfinite(kRadius) || kRadius <= 0.0F) {
     return;

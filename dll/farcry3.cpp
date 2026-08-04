@@ -48,7 +48,6 @@ void AFW_ENGINE_CALL RunAllGroupDetour(void* scheduler) {
 
 constexpr int kAimKey{VK_XBUTTON1};
 constexpr float kDegreesPerRadian{57.2957795F};
-constexpr float kMaxFrameSeconds{0.25F};
 
 [[nodiscard]] bool IsHeld(int key) noexcept {
   constexpr unsigned kDownBit{0x8000U};
@@ -73,29 +72,48 @@ constexpr float kMaxFrameSeconds{0.25F};
   return 0;
 }
 
-[[nodiscard]] bool Wanted(const games::fc3::EntityInfo& entity,
-                          const games::fc3::PawnInfo* self) noexcept {
+// The settings name whole cones, the geometry wants the half-angle off the
+// centre line, so every cone in the menu is halved on its way in. A cone of 360
+// therefore becomes the half turn past which there is nothing left to include.
+[[nodiscard]] float HalfConeRadians(float degrees) noexcept {
+  constexpr float kHalf{0.5F};
+
+  return degrees * kHalf / kDegreesPerRadian;
+}
+
+[[nodiscard]] std::optional<float> Ranked(bool wanted,
+                                          float priority) noexcept {
+  return wanted ? std::optional<float>{priority} : std::nullopt;
+}
+
+[[nodiscard]] std::optional<float> RankOf(
+    const games::fc3::EntityInfo& entity,
+    const games::fc3::PawnInfo* self) noexcept {
   if (!entity.pawn || entity.pawn->dead) {
-    return false;
+    return std::nullopt;
   }
 
   const config::Settings& kSettings{config::Current()};
   switch (esp::KindOf(entity, self)) {
     case esp::Kind::Enemy:
-      return kSettings.aimEnemies.load();
+      return Ranked(kSettings.aimEnemies.load(),
+                    kSettings.aimPriorityEnemies.load());
     case esp::Kind::Predator:
     case esp::Kind::Animal:
-      return kSettings.aimAnimals.load();
+      return Ranked(kSettings.aimAnimals.load(),
+                    kSettings.aimPriorityAnimals.load());
     case esp::Kind::Bird:
-      return kSettings.aimBirds.load();
+      return Ranked(kSettings.aimBirds.load(),
+                    kSettings.aimPriorityBirds.load());
     case esp::Kind::Vehicle:
-      return kSettings.aimVehicles.load();
+      return Ranked(kSettings.aimVehicles.load(),
+                    kSettings.aimPriorityVehicles.load());
     case esp::Kind::Self:
     case esp::Kind::Ally:
     case esp::Kind::Civilian:
     case esp::Kind::Prop:
     default:
-      return false;
+      return std::nullopt;
   }
 }
 
@@ -104,14 +122,17 @@ constexpr float kMaxFrameSeconds{0.25F};
     const games::fc3::CameraBasis& camera) noexcept {
   const config::Settings& kSettings{config::Current()};
   const games::fc3::PawnInfo* const kSelf{esp::FindSelf(snapshot)};
-  const aimbot::Limits kLimits{
-      .maxDistance = kSettings.aimRange.load(),
-      .maxError = kSettings.aimConeDegrees.load() / kDegreesPerRadian};
+  const aimbot::Choice kChoice{
+      .limits = {.maxDistance = kSettings.aimRange.load(),
+                 .maxError = HalfConeRadians(kSettings.aimConeDegrees.load())},
+      .weights = {.aim = kSettings.aimWeightAim.load(),
+                  .distance = kSettings.aimWeightDistance.load(),
+                  .priority = kSettings.aimWeightPriority.load()}};
 
   return aimbot::ChooseTarget(snapshot, camera.position, camera.forward,
-                              kLimits,
+                              kChoice,
                               [kSelf](const games::fc3::EntityInfo& entity) {
-                                return Wanted(entity, kSelf);
+                                return RankOf(entity, kSelf);
                               });
 }
 
@@ -176,55 +197,16 @@ void SteadyAim() noexcept {
   HoldPatch(SwayPatch(), kSettings.noSway.load(), &games::fc3::SuppressSway);
 }
 
-[[nodiscard]] aimbot::MotionTable& Motion() noexcept {
-  static aimbot::MotionTable table{};
-  return table;
-}
-
-[[nodiscard]] float FrameSeconds() noexcept {
-  static LARGE_INTEGER previous{};
-  LARGE_INTEGER frequency{};
-  LARGE_INTEGER now{};
-  if (QueryPerformanceFrequency(&frequency) == FALSE ||
-      QueryPerformanceCounter(&now) == FALSE || frequency.QuadPart == 0) {
-    return 0.0F;
-  }
-
-  const std::int64_t kTicks{now.QuadPart - previous.QuadPart};
-  previous = now;
-  if (previous.QuadPart == now.QuadPart && kTicks == now.QuadPart) {
-    return 0.0F;
-  }
-
-  const float kSeconds{static_cast<float>(
-      static_cast<double>(kTicks) / static_cast<double>(frequency.QuadPart))};
-
-  return (kSeconds > 0.0F && kSeconds < kMaxFrameSeconds) ? kSeconds : 0.0F;
-}
-
-[[nodiscard]] math::Vec3 WhereToShoot(const aimbot::Target& target) noexcept {
-  Motion().Observe(target.entity, target.point, FrameSeconds());
-  if (!config::Current().aimLead.load()) {
-    return target.point;
-  }
-
-  return aimbot::Lead(
-      target.point, Motion().VelocityOf(target.entity),
-      aimbot::TravelTime(target.distance,
-                         config::Current().aimBulletSpeed.load()));
-}
-
-void AimAt(std::uintptr_t state, const games::fc3::EntitySnapshot& snapshot,
+void AimAt(std::uintptr_t state, const aimbot::Target& target,
            const games::fc3::CameraBasis& camera) noexcept {
   const std::optional<math::ViewAngles> kCurrent{
       games::fc3::ReadViewAngles(state)};
-  const std::optional<aimbot::Target> kTarget{Pick(snapshot, camera)};
-  if (!kCurrent || !kTarget) {
+  if (!kCurrent) {
     return;
   }
 
   const math::ViewAngles kWanted{
-      games::fc3::ViewAnglesTo(WhereToShoot(*kTarget) - camera.position)};
+      games::fc3::ViewAnglesTo(target.point - camera.position)};
   const math::ViewAngles kStep{
       aimbot::Share(aimbot::Difference(*kCurrent, kWanted),
                     config::Current().aimSmoothing.load())};
@@ -234,25 +216,61 @@ void AimAt(std::uintptr_t state, const games::fc3::EntitySnapshot& snapshot,
                               .pitch = kCurrent->pitch + kStep.pitch});
 }
 
+// Nothing is clicked unless this process owns the foreground window. Without
+// that check an alt-tab turns the trigger loose on whatever is in front.
+[[nodiscard]] bool OwnWindowHasFocus() noexcept {
+  DWORD owner{0};
+  if (GetWindowThreadProcessId(GetForegroundWindow(), &owner) == 0) {
+    return false;
+  }
+
+  return owner == GetCurrentProcessId();
+}
+
+// Held rather than clicked: an automatic weapon keeps firing while the aim
+// stays on, and a single shot needs the button to come back up anyway. The
+// state is remembered so the button is only ever pressed or released on the
+// frame the answer changes.
+void HoldFire(bool wanted) noexcept {
+  static bool held{false};
+  if (wanted == held) {
+    return;
+  }
+
+  INPUT input{};
+  input.type = INPUT_MOUSE;
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-union-access)
+  input.mi.dwFlags = wanted ? MOUSEEVENTF_LEFTDOWN : MOUSEEVENTF_LEFTUP;
+  if (SendInput(1, &input, sizeof(input)) == 1) {
+    held = wanted;
+  }
+}
+
 void RunAssist() noexcept {
   const config::Settings& kSettings{config::Current()};
   if (!kSettings.aimEnabled.load() || !IsHeld(kAimKey)) {
+    HoldFire(false);
     return;
   }
 
   const std::expected<games::fc3::CameraBasis, std::error_code> kCamera{
       games::fc3::ReadCamera()};
   if (!kCamera) {
+    HoldFire(false);
     return;
   }
 
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   const std::uintptr_t kState{CameraState(kSnapshot, kCamera->forward)};
-  if (kState == 0) {
+  const std::optional<aimbot::Target> kTarget{Pick(kSnapshot, *kCamera)};
+  if (kState == 0 || !kTarget) {
+    HoldFire(false);
     return;
   }
 
-  AimAt(kState, kSnapshot, *kCamera);
+  AimAt(kState, *kTarget, *kCamera);
+  HoldFire(kSettings.autoFire.load() && OwnWindowHasFocus() &&
+           kTarget->error <= HalfConeRadians(kSettings.autoFireCone.load()));
 }
 
 void LogStatus(std::uint64_t frames) {

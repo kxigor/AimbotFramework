@@ -3,8 +3,6 @@
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/math/vec3.hpp>
-#include <array>
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -21,6 +19,8 @@ struct Target {
   Vec3 point{};
   float error{};
   float distance{};
+  // What the caller said this kind of target is worth to it.
+  float priority{};
 };
 
 // What is allowed to be considered. Anything past either of these is not a near
@@ -53,91 +53,97 @@ struct Limits {
 // is the only point there is for an entity whose bones could not be read.
 [[nodiscard]] Vec3 AimPoint(const games::fc3::EntityInfo& entity) noexcept;
 
-// Where a point travelling at `velocity` will be once a shot has had time to
-// arrive. Aiming at where a target stands is aiming behind it: the correction
-// is computed, applied over several frames, and by the time the shot leaves,
-// the target has walked out of it.
-[[nodiscard]] Vec3 Lead(const Vec3& point, const Vec3& velocity,
-                        float seconds) noexcept;
-
-// How long a shot needs to cross `distance`. Zero or a nonsense speed means no
-// lead at all rather than an infinite one.
-[[nodiscard]] float TravelTime(float distance, float speed) noexcept;
-
-// Faster than anything in this world actually travels, so a step implying more
-// than this is not movement: a corpse going to ragdoll throws its head bone
-// across a frame, and a fresh entity reusing a dead one's address looks like a
-// jump across the map. Believing either of those aims somewhere else entirely.
-constexpr float kMaxTargetSpeed{60.0F};
-
-// One target's movement, remembered between frames. Velocity is only believed
-// once two positions have been seen for the same entity: the first sighting has
-// nothing to difference against, and an entity reusing a dead one's address
-// would otherwise appear to cross the map in a frame.
-struct Motion {
-  std::uintptr_t entity{};
-  Vec3 point{};
-  Vec3 velocity{};
-  bool settled{};
-};
-
-// Keeps one row per target and turns successive positions into a velocity.
-// Rows are matched by entity address and evicted by age, so a world larger than
-// the table degrades to no lead rather than to a wrong one.
-class MotionTable {
- public:
-  static constexpr std::size_t kRows{64};
-
-  void Observe(std::uintptr_t entity, const Vec3& point,
-               float seconds) noexcept;
-
-  [[nodiscard]] Vec3 VelocityOf(std::uintptr_t entity) const noexcept;
-
-  void Forget() noexcept;
-
- private:
-  std::array<Motion, kRows> rows_{};
-  std::size_t next_{};
-};
-
 // Scored on how far the eye already points at it, so the winner is whoever the
-// player is closest to aiming at. Distance decides only whether an entity is
-// considered at all -- ranking by it would swap targets whenever somebody
-// walked past in front.
+// player is closest to aiming at. Distance and the caller's own ordering only
+// count for as much as their weights say, which is nothing by default.
+struct Weights {
+  float aim{1.0F};
+  float distance{};
+  float priority{};
+};
+
+// Everything the choice turns on: who may be considered at all, and how those
+// who may are ranked against each other.
+struct Choice {
+  Limits limits{};
+  Weights weights{};
+};
+
+// A term's share of the score, from 1 where `value` is nothing to 0 where it
+// has reached `worst`. A limit of zero admits nobody, so nothing can score by
+// it either.
+[[nodiscard]] constexpr float Nearness(float value, float worst) noexcept {
+  return worst > 0.0F ? 1.0F - (value / worst) : 0.0F;
+}
+
+// What one entity would be worth as a target, or nothing if it is not one:
+// `rank` refuses it, it stands beyond the range, or it lies outside the cone.
+template <typename Rank>
+[[nodiscard]] std::optional<Target> Considered(
+    const games::fc3::EntityInfo& entity, const Vec3& eye, const Vec3& forward,
+    const Limits& limits, Rank rank) noexcept {
+  const std::optional<float> kPriority{rank(entity)};
+  if (!kPriority) {
+    return std::nullopt;
+  }
+
+  const Vec3 kPoint{AimPoint(entity)};
+  const Vec3 kOffset{kPoint - eye};
+  const float kDistance{kOffset.Length()};
+  if (kDistance > limits.maxDistance) {
+    return std::nullopt;
+  }
+
+  const float kError{AngleBetween(forward, kOffset)};
+  if (kError > limits.maxError) {
+    return std::nullopt;
+  }
+
+  return Target{.entity = entity.address,
+                .point = kPoint,
+                .error = kError,
+                .distance = kDistance,
+                .priority = *kPriority};
+}
+
+[[nodiscard]] inline float ScoreOf(const Choice& choice,
+                                   const Target& target) noexcept {
+  return (choice.weights.aim * Nearness(target.error, choice.limits.maxError)) +
+         (choice.weights.distance *
+          Nearness(target.distance, choice.limits.maxDistance)) +
+         (choice.weights.priority * target.priority);
+}
+
+// Ranked, not merely filtered: every candidate inside the cone is scored and
+// the best score wins. Each term is a 0..1 nearness before its weight applies,
+// so the weights are directly comparable and any of them may be zero. All of
+// them zero leaves every candidate tied on nothing, and the first one found
+// wins by default.
 //
-// Which entities count is the caller's business: this asks `wanted` and holds
-// no opinion of its own about who is hostile.
-template <typename Predicate>
+// Which entities count is the caller's business: `rank` returns nothing for an
+// entity that is not a target at all, and otherwise how much the caller wants
+// that kind. This holds no opinion of its own about who is hostile.
+template <typename Rank>
 [[nodiscard]] std::optional<Target> ChooseTarget(
     const games::fc3::EntitySnapshot& snapshot, const Vec3& eye,
-    const Vec3& forward, const Limits& limits, Predicate wanted) noexcept {
+    const Vec3& forward, const Choice& choice, Rank rank) noexcept {
   std::optional<Target> best;
+  float bestScore{};
 
   for (std::uint32_t index{0}; index < snapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{snapshot.items.at(index)};
-    if (!wanted(kEntity)) {
+    const std::optional<Target> kCandidate{Considered(
+        snapshot.items.at(index), eye, forward, choice.limits, rank)};
+    if (!kCandidate) {
       continue;
     }
 
-    const Vec3 kPoint{AimPoint(kEntity)};
-    const Vec3 kOffset{kPoint - eye};
-    const float kDistance{kOffset.Length()};
-    if (kDistance > limits.maxDistance) {
+    const float kScore{ScoreOf(choice, *kCandidate)};
+    if (best && bestScore >= kScore) {
       continue;
     }
 
-    const float kError{AngleBetween(forward, kOffset)};
-    if (kError > limits.maxError) {
-      continue;
-    }
-    if (best && best->error <= kError) {
-      continue;
-    }
-
-    best = Target{.entity = kEntity.address,
-                  .point = kPoint,
-                  .error = kError,
-                  .distance = kDistance};
+    bestScore = kScore;
+    best = kCandidate;
   }
 
   return best;

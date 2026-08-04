@@ -18,7 +18,7 @@ namespace {
 
 constexpr WPARAM kToggleKey{VK_INSERT};
 constexpr float kWidth{300.0F};
-constexpr float kHeight{520.0F};
+constexpr float kHeight{700.0F};
 
 void Toggle(const char* label, std::atomic<bool>& flag) {
   bool value{flag.load()};
@@ -53,17 +53,37 @@ void ShowAimSettings(config::Settings& settings) {
   Toggle("target animals", settings.aimAnimals);
   Toggle("target birds", settings.aimBirds);
   Toggle("target vehicles", settings.aimVehicles);
-  Toggle("lead moving targets", settings.aimLead);
-  if (settings.aimLead.load()) {
-    Slider("bullet speed", settings.aimBulletSpeed, config::kMinBulletSpeed,
-           config::kMaxBulletSpeed, "%.0f m/s");
+
+  Toggle("auto fire", settings.autoFire);
+  if (settings.autoFire.load()) {
+    Slider("fire cone", settings.autoFireCone, config::kMinAutoFireCone,
+           config::kMaxAutoFireCone, "%.1f deg");
   }
+
   Slider("smoothing", settings.aimSmoothing, config::kMinAimSmoothing,
          config::kMaxAimSmoothing, "%.2f");
-  Slider("cone", settings.aimConeDegrees, config::kMinAimCone,
+  Slider("fov", settings.aimConeDegrees, config::kMinAimCone,
          config::kMaxAimCone, "%.0f deg");
   Slider("range", settings.aimRange, config::kMinAimRange, config::kMaxAimRange,
          "%.0f m");
+
+  ImGui::SeparatorText("target choice");
+  Slider("weight: aim", settings.aimWeightAim, 0.0F, config::kMaxWeight,
+         "%.2f");
+  Slider("weight: distance", settings.aimWeightDistance, 0.0F,
+         config::kMaxWeight, "%.2f");
+  Slider("weight: priority", settings.aimWeightPriority, 0.0F,
+         config::kMaxWeight, "%.2f");
+  if (settings.aimWeightPriority.load() > 0.0F) {
+    Slider("priority: enemies", settings.aimPriorityEnemies, 0.0F,
+           config::kMaxPriority, "%.2f");
+    Slider("priority: animals", settings.aimPriorityAnimals, 0.0F,
+           config::kMaxPriority, "%.2f");
+    Slider("priority: birds", settings.aimPriorityBirds, 0.0F,
+           config::kMaxPriority, "%.2f");
+    Slider("priority: vehicles", settings.aimPriorityVehicles, 0.0F,
+           config::kMaxPriority, "%.2f");
+  }
 }
 
 [[nodiscard]] bool IsInput(UINT message) noexcept {
@@ -129,7 +149,7 @@ void Draw() noexcept {
     Toggle("birds", settings.espBirds);
     Toggle("vehicles", settings.espVehicles);
     Toggle("props", settings.espProps);
-    Toggle("head boxes", settings.espHeadBoxes);
+    Toggle("aim boxes (head / spine)", settings.espAimBoxes);
   }
 
   ShowAimSettings(settings);

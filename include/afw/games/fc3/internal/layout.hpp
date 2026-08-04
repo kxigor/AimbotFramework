@@ -124,6 +124,13 @@ constexpr std::uint32_t kHeadBoneKey{0x07C159A2};
 // under a boar. The spine is where the animal actually is.
 constexpr std::uint32_t kSpineBoneKey{0x530EC1CB};
 
+// Tried in turn when the first is missing. A bird is the reason there is a
+// chain at all: its box is a flat slab a tenth of a metre tall sitting where
+// its own coordinates are, which is not where the bird is, so falling back to
+// the middle of that box aims at nothing. Anything that lands on the creature
+// beats it, the head included.
+constexpr std::uint32_t kSpineOneBoneKey{0x8F39FA4E};
+
 // The camera the player looks through is one of the player entity's own
 // components: CPlayerCamera::GetCameraPosition at 0x104301a0 reaches the player
 // back through +0x04 -> +0x0C, the same owner handle every component carries.
