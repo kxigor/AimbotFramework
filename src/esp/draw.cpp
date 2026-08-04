@@ -5,7 +5,9 @@
 #include <afw/esp/internal/draw.hpp>
 #include <afw/esp/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <optional>
@@ -25,6 +27,9 @@ constexpr float kHeadHalf{0.13F};
 constexpr float kHeadLift{0.10F};
 constexpr float kHeadThickness{1.0F};
 constexpr float kMarkerRadius{6.0F};
+constexpr float kDegreesPerRadian{57.2957795F};
+constexpr float kConeThickness{1.0F};
+constexpr ImU32 kConeColour{0x50FFFFFF};
 constexpr float kCrosshairArm{11.0F};
 constexpr float kCrosshairThickness{1.5F};
 
@@ -178,6 +183,29 @@ void DrawEntities(const Vec3& eye, const Matrix4& projection,
     DrawBox(kEntity, projection, display, kColour,
             kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
   }
+}
+
+void DrawAimCone(const ImVec2& display, float verticalFov) {
+  const config::Settings& kSettings{config::Current()};
+  if (!kSettings.aimEnabled.load()) {
+    return;
+  }
+
+  const float kHalfFov{verticalFov * kHalfF};
+  const float kEdge{std::tan(kHalfFov)};
+  if (kEdge <= 0.0F) {
+    return;
+  }
+
+  const float kCone{kSettings.aimConeDegrees.load() / kDegreesPerRadian};
+  const float kRadius{display.y * kHalfF * std::tan(kCone) / kEdge};
+  if (!std::isfinite(kRadius) || kRadius <= 0.0F) {
+    return;
+  }
+
+  ImGui::GetBackgroundDrawList()->AddCircle(
+      ImVec2{display.x * kHalfF, display.y * kHalfF},
+      std::min(kRadius, display.y), kConeColour, 0, kConeThickness);
 }
 
 void DrawMarker(const std::optional<ScreenPoint>& point, ImU32 colour) {

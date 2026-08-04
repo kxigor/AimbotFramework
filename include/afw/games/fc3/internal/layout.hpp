@@ -136,6 +136,31 @@ constexpr std::uintptr_t kCameraAnglesSource{0x584};
 constexpr std::uintptr_t kViewAnglePitch{0x00};
 constexpr std::uintptr_t kViewAngleYaw{0x08};
 
+// Firing pushes the view up through a decaying term the engine keeps beside the
+// angles, once per block: state A's +0xF4 and the source block's +0xF4. Named
+// by suppression rather than by the binary, which calls it nothing: held at
+// zero, six shots produced not one frame in which the pitch rose, against a
+// 0.29 degree kick over two shots with them left alone. The three candidates
+// the disassembly suggested first -- the decaying triple at camera +0x120 --
+// never left zero across ten seconds of play, so they are some other effect.
+constexpr std::uintptr_t kCameraRecoilA{0x3C4};
+constexpr std::uintptr_t kCameraRecoilSource{0x5D4};
+
+// Where the shot handler at 0x1041ab6d stores the kick it just worked out.
+// FUN_1031c106 is a nine-word struct copy -- __thiscall, destination in ECX,
+// source pushed, and it returns with RET 4, so it clears the argument itself.
+// Skipping the call therefore has to clear the argument in its place, which is
+// what ADD ESP,4 followed by two NOPs does in exactly the five bytes the CALL
+// occupied. Nothing else writes the kick, so with the store gone every weapon
+// is steady at once, and none of the per-weapon parameter blocks are touched.
+//
+// The signature covers the argument push, the destination, the two field
+// stores and the call, with only the call's own displacement masked out. The
+// bytes to replace start kRecoilStorePatchOffset in.
+constexpr const char* kRecoilStoreSignature{
+    "50 8D 4E 78 F3 0F 11 55 E0 F3 0F 11 45 CC C6 45 D0 01 E8 ?? ?? ?? ??"};
+constexpr std::uintptr_t kRecoilStorePatchOffset{0x12};
+
 // min at +0x6C and max at +0x78, which is one Vec3 apart, so both come in one
 // read.
 constexpr std::uintptr_t kEntityAabb{0x6C};

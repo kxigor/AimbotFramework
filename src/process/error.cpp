@@ -17,6 +17,10 @@ std::string Describe(Error error) {
     case Error::NotWritable:
       return "the address is not writable: the page is read-only, guarded, or "
              "the write would leave the region";
+    case Error::BadPattern:
+      return "the signature is not a run of hex byte and ? tokens";
+    case Error::PatternNotFound:
+      return "the signature does not occur in the module";
     default:
       return "unknown afw::process error";
   }

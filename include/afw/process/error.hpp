@@ -10,6 +10,8 @@ enum class Error : std::uint8_t {
   ModuleNotFound = 1,
   NotReadable = 2,
   NotWritable = 3,
+  BadPattern = 4,
+  PatternNotFound = 5,
 };
 
 [[nodiscard]] const std::error_category& ErrorCategory();

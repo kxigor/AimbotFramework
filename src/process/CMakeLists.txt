@@ -7,6 +7,7 @@
 
 add_library(afw_process STATIC
   memory.cpp
+  scan.cpp
   error.cpp
 )
 add_library(afw::process ALIAS afw_process)

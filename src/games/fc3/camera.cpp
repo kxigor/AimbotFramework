@@ -2,9 +2,12 @@
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
+#include <afw/hook/patch.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/process/memory.hpp>
+#include <afw/process/scan.hpp>
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <expected>
@@ -101,6 +104,18 @@ bool WriteViewAngles(std::uintptr_t state, const ViewAngles& angles) noexcept {
   }
 
   return written;
+}
+
+std::expected<hook::CodePatch, std::error_code> SuppressRecoil() noexcept {
+  const std::expected<std::uintptr_t, std::error_code> kSite{
+      process::FindPattern(kModuleName, kRecoilStoreSignature)};
+  if (!kSite) {
+    return std::unexpected{kSite.error()};
+  }
+
+  constexpr std::array<std::uint8_t, 5> kSkip{0x83, 0xC4, 0x04, 0x90, 0x90};
+
+  return hook::CodePatch::Apply(*kSite + kRecoilStorePatchOffset, kSkip);
 }
 
 std::expected<CameraBasis, std::error_code> ReadCamera() noexcept {

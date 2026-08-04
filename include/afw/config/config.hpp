@@ -37,6 +37,9 @@ struct Settings {
   std::atomic<bool> aimEnabled{true};
   std::atomic<bool> aimEnemies{true};
   std::atomic<bool> aimAnimals{false};
+  std::atomic<bool> aimBirds{false};
+  std::atomic<bool> aimVehicles{false};
+  std::atomic<bool> noRecoil{false};
   // The fraction of the remaining correction applied each frame. At 1 the view
   // snaps, which no hand does.
   std::atomic<float> aimSmoothing{kDefaultAimSmoothing};

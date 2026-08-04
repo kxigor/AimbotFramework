@@ -3,6 +3,7 @@
 #include <afw/abi/abi.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
 #include <afw/hook/hook.hpp>
+#include <afw/hook/patch.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -144,6 +145,11 @@ struct EntitySnapshot {
 // Writes every copy the engine keeps. Setting only the one it commits to leaves
 // the next frame reading the old heading back out of the other.
 bool WriteViewAngles(std::uintptr_t state, const ViewAngles& angles) noexcept;
+
+// Stops the shot handler storing the kick it worked out. Held for as long as
+// the returned patch is alive; letting it go puts the game's own bytes back.
+[[nodiscard]] std::expected<hook::CodePatch, std::error_code>
+SuppressRecoil() noexcept;
 
 [[nodiscard]] std::expected<Viewport, std::error_code> ReadViewport() noexcept;
 

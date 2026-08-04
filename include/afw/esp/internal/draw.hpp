@@ -17,4 +17,10 @@ void DrawMarker(const std::optional<ScreenPoint>& point, ImU32 colour);
 
 void DrawCrosshair(const std::optional<ScreenPoint>& point, ImU32 colour);
 
+// The reach of the aim assist, as the ring it actually is. The cone is an angle
+// from the view axis, so its radius on screen follows from the projection
+// rather than from any pixel count: nothing inside the ring is out of reach,
+// and nothing outside it is considered.
+void DrawAimCone(const ImVec2& display, float verticalFov);
+
 }  // namespace afw::esp

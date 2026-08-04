@@ -11,6 +11,7 @@
 #include <afw/esp/esp.hpp>
 #include <afw/esp/internal/classify.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/hook/patch.hpp>
 #include <afw/hook/vmt_hook.hpp>
 #include <afw/hook/vtable.hpp>
 #include <afw/math/angle.hpp>
@@ -23,6 +24,7 @@
 #include <expected>
 #include <optional>
 #include <system_error>
+#include <utility>
 
 namespace afw::dll {
 
@@ -83,11 +85,13 @@ constexpr float kDegreesPerRadian{57.2957795F};
     case esp::Kind::Predator:
     case esp::Kind::Animal:
       return kSettings.aimAnimals.load();
+    case esp::Kind::Bird:
+      return kSettings.aimBirds.load();
+    case esp::Kind::Vehicle:
+      return kSettings.aimVehicles.load();
     case esp::Kind::Self:
     case esp::Kind::Ally:
     case esp::Kind::Civilian:
-    case esp::Kind::Bird:
-    case esp::Kind::Vehicle:
     case esp::Kind::Prop:
     default:
       return false;
@@ -127,7 +131,50 @@ constexpr float kDegreesPerRadian{57.2957795F};
   return CameraStateCache();
 }
 
-void RunAim() noexcept {
+[[nodiscard]] std::optional<hook::CodePatch>& RecoilPatch() noexcept {
+  static std::optional<hook::CodePatch> patch;
+  return patch;
+}
+
+void SteadyAim() noexcept {
+  const bool kWanted{config::Current().noRecoil.load()};
+  if (kWanted == RecoilPatch().has_value()) {
+    return;
+  }
+
+  if (!kWanted) {
+    RecoilPatch().reset();
+    return;
+  }
+
+  std::expected<hook::CodePatch, std::error_code> applied{
+      games::fc3::SuppressRecoil()};
+  if (applied) {
+    RecoilPatch().emplace(std::move(*applied));
+  }
+}
+
+void AimAt(std::uintptr_t state, const games::fc3::EntitySnapshot& snapshot,
+           const games::fc3::CameraBasis& camera) noexcept {
+  const std::optional<math::ViewAngles> kCurrent{
+      games::fc3::ReadViewAngles(state)};
+  const std::optional<aimbot::Target> kTarget{Pick(snapshot, camera)};
+  if (!kCurrent || !kTarget) {
+    return;
+  }
+
+  const math::ViewAngles kWanted{
+      games::fc3::ViewAnglesTo(kTarget->point - camera.position)};
+  const math::ViewAngles kStep{
+      aimbot::Share(aimbot::Difference(*kCurrent, kWanted),
+                    config::Current().aimSmoothing.load())};
+
+  games::fc3::WriteViewAngles(
+      state, math::ViewAngles{.yaw = math::WrapAngle(kCurrent->yaw + kStep.yaw),
+                              .pitch = kCurrent->pitch + kStep.pitch});
+}
+
+void RunAssist() noexcept {
   const config::Settings& kSettings{config::Current()};
   if (!kSettings.aimEnabled.load() || !IsHeld(kAimKey)) {
     return;
@@ -145,22 +192,7 @@ void RunAim() noexcept {
     return;
   }
 
-  const std::optional<math::ViewAngles> kCurrent{
-      games::fc3::ReadViewAngles(kState)};
-  const std::optional<aimbot::Target> kTarget{Pick(kSnapshot, *kCamera)};
-  if (!kCurrent || !kTarget) {
-    return;
-  }
-
-  const math::ViewAngles kWanted{
-      games::fc3::ViewAnglesTo(kTarget->point - kCamera->position)};
-  const math::ViewAngles kStep{aimbot::Share(
-      aimbot::Difference(*kCurrent, kWanted), kSettings.aimSmoothing.load())};
-
-  games::fc3::WriteViewAngles(
-      kState,
-      math::ViewAngles{.yaw = math::WrapAngle(kCurrent->yaw + kStep.yaw),
-                       .pitch = kCurrent->pitch + kStep.pitch});
+  AimAt(kState, kSnapshot, *kCamera);
 }
 
 void LogStatus(std::uint64_t frames) {
@@ -206,7 +238,8 @@ void FarCry3::OnFrame() noexcept {
   ++frames;
 
   games::fc3::PublishCensus();
-  RunAim();
+  SteadyAim();
+  RunAssist();
 
   if (frames % kStatusInterval == 0) {
     LogStatus(frames);

@@ -10,6 +10,7 @@
 
 add_library(afw_hook STATIC
   vtable.cpp
+  patch.cpp
   vmt_hook.cpp
   wnd_proc_hook.cpp
   error.cpp

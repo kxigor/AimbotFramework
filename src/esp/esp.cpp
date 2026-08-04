@@ -44,6 +44,14 @@ struct Markers {
           display.x, display.y)};
 }
 
+void ShowPanelBody(const Vec3& eye, const Vec3& forward, const ImVec2& display,
+                   const Markers& markers) {
+  ShowMarkers(display, markers.ahead, markers.probe);
+  ShowPools(eye);
+  ShowEntities(eye, forward);
+  ShowVtables();
+}
+
 }  // namespace
 
 void DrawFrame() noexcept {
@@ -86,14 +94,12 @@ void DrawFrame() noexcept {
   const Markers kMarkers{
       ProjectMarkers(kViewProjection, kEye, kForward, kRight, kDisplay)};
 
-  ShowMarkers(kDisplay, kMarkers.ahead, kMarkers.probe);
-  ShowPools(kEye);
-  ShowEntities(kEye, kForward);
-  ShowVtables();
+  ShowPanelBody(kEye, kForward, kDisplay, kMarkers);
   ImGui::End();
 
   DrawEntities(kEye, kViewProjection, kDisplay);
 
+  DrawAimCone(kDisplay, kVerticalFov);
   DrawCrosshair(kMarkers.ahead, kAheadColour);
   DrawMarker(kMarkers.probe, kRightColour);
 }
