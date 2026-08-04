@@ -7,19 +7,28 @@ subject.
 The pipeline works end to end: `injector.exe` loads `aimbot.dll` into the running
 game, the DLL hooks `IDXGISwapChain::Present` and the engine's per-frame entity
 walk, draws an ImGui overlay over the frame, reads the game's live camera and
-projects world entities into screen boxes. The overlay takes input, the ESP can
-be switched off from its menu, and the DLL can unload itself again. What is left
-is the aim assist on top of it.
+projects world entities into screen boxes. On top of that sits the aim assist —
+it picks a target by a weighted score, steers the view onto a bone, and can pull
+the trigger — and a set of byte patches that take recoil, sway, spread and the
+empty-magazine check out of the game while their toggles are held down. The
+overlay takes input, every feature can be switched off from its menu, and the DLL
+can unload itself again, putting the game's own bytes back as it goes.
 
 `afw` = **A**imbot**F**rame**w**ork (namespace / target prefix).
 
 ![The overlay running in Far Cry 3](docs/images/esp-overlay.png)
 
-Everything in that frame is drawn by the injected DLL: the `ESP` panel on the
-left with the camera pointer chain and the entity census, the menu with the
-feature toggle and the unload button, the boxes over the entities down the road,
-and the two calibration markers at the centre — green two metres straight ahead,
-orange two metres to the right at ten.
+Everything in that frame except the game is drawn by the injected DLL: the menu
+on the right, the boxes over the men down the road and over the one behind the
+rock in the foreground, the smaller cube inside each of them marking where a
+shot would actually go, and the green marker at the centre standing two metres
+straight ahead to prove the projection honest.
+
+The menu is the whole feature set in one column — what to draw, what to patch,
+what to aim at — and under it the four weights the target choice is made of. In
+this shot reachability is at 1.00 against 0.64 for the other three together,
+which is what makes a man behind cover lose to one in the open however well
+placed he is. The diagnostics panel is unticked, so it is not drawn at all.
 
 ## Status
 
@@ -43,10 +52,14 @@ Implemented:
   kinds be held together. Each has two factories: `Create` for a hook that lives
   in one scope, `CreateDynamic` for one that has to outlive it. The second
   exists because the hooks are deliberately not movable: they own a patched slot,
-  and two live copies would both try to restore it.
+  and two live copies would both try to restore it. `CodePatch` is the same idea
+  one level down — bytes written over the game's own instructions and put back
+  when it goes away, so a setting that is switched off leaves nothing behind.
 - **`afw::process`** — module bases and reads that report an unreadable address
   instead of faulting: a wrong offset becomes a `std::error_code`, not a crash in
-  the host process.
+  the host process. `FindPattern` locates code by a masked byte signature over
+  the module's own image, which is what lets a patch survive a different build of
+  the game where a number lifted out of a decompiler would not.
 - **`afw::render`** — obtains the swap chain vtable from a throwaway WARP probe,
   owns the `Present` binding, and draws the ImGui overlay, offering its users a
   per-frame callback.
@@ -58,13 +71,32 @@ Implemented:
   camera, its basis and field of view, the render viewport, and the per-frame
   walk over the engine's entity update groups. Every step is a checked read, and
   all addresses are rebased from the Ghidra image base at run time, so ASLR is
-  handled in one place.
+  handled in one place. On top of the reads it also:
+  - reads the view angles the engine steers by, and writes all three copies it
+    keeps — setting only the one it commits to leaves the next frame reading the
+    old heading back out of another;
+  - finds the skeleton and hands back the bones worth aiming at: the head on a
+    man, the spine on an animal or a bird, whose own coordinates are nowhere near
+    its body;
+  - holds the four byte patches — recoil, sway, spread and the empty-magazine
+    check — each found by signature and each explained where it lives, because a
+    patch nobody can re-derive is a patch nobody can trust;
+  - puts segments to the engine's own collision world and reads the answers back
+    out of it, which is how a target behind cover is known to be behind cover.
 - **`afw::math`** — `Vec3` and the algebra on it. It is also the wire format:
   the engine stores three consecutive floats wherever a point or an axis goes,
   so `afw::process::ReadAt` copies straight into it and nothing converts
   anywhere between reading the game's memory and projecting to the screen. That
   is what keeps it a trivially copyable aggregate — a constructor or a private
   member would silently change what every read returns.
+- **`afw::aimbot`** — the aim assist, kept engine-agnostic: it is handed a
+  snapshot and an eye, and holds no opinion about who is hostile. Candidates
+  inside the cone are **scored, not merely filtered** — closeness to the aim,
+  closeness in distance, what the caller thinks the kind is worth, and whether a
+  shot would get there at all. Each term is a 0..1 nearness before its weight
+  applies, so the weights are comparable and any of them may be zero; with only
+  the first set it picks whoever the eye already points nearest to, which is
+  what it did before there was a formula.
 - **`afw::config`** — the toggles the menu writes and the ESP reads, so neither
   owns the other's state.
 - **`afw::menu`** — the overlay's user interface and its message routing:
@@ -82,7 +114,6 @@ Implemented:
 
 Skeleton — the header, target and empty namespace are in place, the code is not:
 
-- **`afw::aimbot`** — the aim-assist logic, kept engine-agnostic.
 - **`afw::games::doom3`** — Doom 3 (id Tech 4). Chosen for **OpenGL**, and
   because its engine source is published: the structures do not have to be
   recovered from a disassembly first. Far Cry 3 cost months of that, and it is
@@ -108,7 +139,9 @@ same `VmtHook` that intercepts `Present` intercepts it too.
 | M8 | menu: ESP toggle, self-unload | done |
 | M10 | `afw::app`: the session lifted out of `dllmain`, no title left in it | done |
 | M5 | `ResizeBuffers` | not blocking — the render target view is rebuilt every frame |
-| M9 | aim assist | next |
+| M9 | aim assist: target choice, view steering, auto-fire | done |
+| M12 | byte patches: recoil, sway, spread, magazine | done |
+| M13 | reachability through the engine's own collision world | done |
 | M11 | OpenGL and Vulkan frame hooks; untie `esp` from one title | planned |
 
 M6 was taken before M4 and M5 deliberately: the geometry is the part the project
@@ -116,11 +149,18 @@ exists to learn, and it needs neither input nor a cached render target.
 
 ### Direction
 
-The ESP comes before the aim assist. It exercises the whole pipeline — locate
-entities, read memory, project to screen, draw — while staying **read-only**, so
-a mistake shows up as a visual glitch rather than as corrupted game memory. The
-aim assist adds angle solving and writes into another process, which is a
-separate class of problem and is cheaper to approach once the pipeline works.
+The ESP came before the aim assist, and that order paid. It exercises the whole
+pipeline — locate entities, read memory, project to screen, draw — while staying
+**read-only**, so a mistake shows up as a visual glitch rather than as corrupted
+game memory. Only once that worked did anything start writing: view angles first,
+then bytes over the game's own code, then calls into its collision world. Each of
+those is a step further from "if I am wrong, a box lands in the wrong place".
+
+The overlay stayed useful after that, in a way that was not the plan: it is how
+the aim assist is debugged. The cube is drawn where the shot is going, not where
+the entity is, and a target the collision world says is unreachable is drawn in
+another colour — so "why did it shoot through a wall" is a question the screen
+answers, rather than one the log has to.
 
 The foundation is the frame loop, not the menu. Once `Present` is hooked there is
 a per-frame callback holding a valid `ID3D11Device` / `ID3D11DeviceContext`;
@@ -137,9 +177,9 @@ are single-player and long dead, which keeps the scope where the licence puts
 it. Both also have published engine sources, which is a separate and purely
 practical matter: the months Far Cry 3 took to recover from a disassembly are
 not the part of this worth repeating. `afw::app` already carries no knowledge of
-a title; `afw::esp` still links
-`afw::games::fc3` directly and has to be untied from it before the second title
-can draw anything.
+a title; `afw::esp` and `afw::aimbot` both still link `afw::games::fc3` directly
+and have to be untied from it before the second title can draw or aim at
+anything.
 
 ## Architecture
 
@@ -173,8 +213,9 @@ graph TD
   ESP --> MATH[afw::math]
   ESP -.-> RENDER
   ESP -.-> FC3
-  AIMBOT --> PROCESS[afw::process]
-  FC3 --> PROCESS
+  AIMBOT --> MATH
+  AIMBOT --> FC3
+  FC3 --> PROCESS[afw::process]
   FC3 --> MATH
   FC3 --> HOOK
   RENDER --> HOOK
@@ -190,9 +231,12 @@ ESP runs with no user interface present. `config` and `math` are the libraries
 with no Win32 dependency, so they build everywhere — and they are the two whose
 tests run on any platform.
 
-The one edge that does not belong in that picture is `esp -.-> games::fc3`. It
-is drawn because it is real, not because it is right: the ESP reaches into one
-specific title for its entity list instead of being handed one.
+The two edges that do not belong in that picture are `esp -.-> games::fc3` and
+`aimbot --> games::fc3`. They are drawn because they are real, not because they
+are right: both reach into one specific title for their entity list instead of
+being handed one. The aim assist calls itself engine-agnostic and is, in its
+arithmetic — angles, scores, weights — but its input type still has a game's name
+on it, and that is the seam the second title will break.
 
 The types themselves:
 
@@ -307,6 +351,8 @@ classDiagram
     +Matrix4 transform
     +Aabb box
     +optional~PawnInfo~ pawn
+    +optional~Vec3~ head
+    +optional~Vec3~ body
     +bool humanoid
   }
   class EntitySnapshot {
@@ -324,8 +370,48 @@ classDiagram
   class Diagnostics
   class Settings {
     +bool espEnabled
+    +bool espPanel
+    +bool aimEnabled
+    +bool autoFire
+    +bool noRecoil
+    +bool noSway
+    +bool noSpread
+    +bool infiniteAmmo
+    +float aimConeDegrees
+    +float aimWeightReach
     +bool menuVisible
     +bool unloadRequested
+  }
+
+  class Target {
+    +uintptr entity
+    +Vec3 point
+    +float error
+    +float distance
+    +float priority
+    +float reach
+  }
+  class Weights {
+    +float aim
+    +float distance
+    +float priority
+    +float reach
+  }
+  class Limits {
+    +float maxDistance
+    +float maxError
+  }
+  class Choice {
+    +Limits limits
+    +Weights weights
+  }
+  class CodePatch {
+    +Apply(uintptr, span)$ expected
+    +Restore()
+  }
+  class TraceAnswer {
+    +uint32 hits
+    +TraceHit first
   }
 
   Hook <|-- VmtHook
@@ -342,6 +428,11 @@ classDiagram
   EntitySnapshot o-- EntityInfo
   EntityInfo o-- Aabb
   EntityInfo o-- PawnInfo
+  Choice o-- Limits
+  Choice o-- Weights
+  Choice ..> Target : scores and picks one
+  EntityInfo ..> Target : becomes, if it survives the limits
+  TraceAnswer ..> Target : says whether a shot would get there
   Aabb o-- Vec3
   CameraBasis o-- Vec3
   CameraBasis ..> Matrix4 : builds
@@ -361,29 +452,30 @@ third_party/
 docs/
   images/               screenshots referenced from this file
 include/afw/            public headers (sibling of src/)
-  win/ remote/ hook/ process/ render/ esp/ menu/ app/ config/ math/ games/fc3/
-                                                                   implemented
-  aimbot/ games/doom3/ games/q2rtx/                                  skeleton
+  win/ remote/ hook/ process/ render/ esp/ menu/ app/ config/ math/ aimbot/
+  games/fc3/                                                       implemented
+  games/doom3/ games/q2rtx/                                          skeleton
 src/
-  win/ remote/ hook/ process/ render/ esp/ menu/ app/ games/fc3/
+  win/ remote/ hook/ process/ render/ esp/ menu/ app/ aimbot/ games/fc3/
                                           STATIC, Windows-only
   config/ math/                           STATIC, platform-agnostic
-  aimbot/ games/doom3/ games/q2rtx/       STATIC, skeleton
+  games/doom3/ games/q2rtx/               STATIC, skeleton
 injector/
   injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
 dll/
   dllmain.cpp           entry point -> starts a thread, hands one Game to
                         afw::app::Run, and nothing else
-  farcry3.cpp/.hpp      the Far Cry 3 Game: its entity-walk detour, its status
-                        line and what it draws each frame
+  farcry3.cpp/.hpp      the Far Cry 3 Game: its entity-walk detour, the aim
+                        assist and auto-fire, which patches are held, the
+                        reachability queries and the status line
 tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
 
 Dependency direction: `games::* -> process`; `render -> hook -> win`; `app` sits
-on `render`, `menu` and `hook` and knows no game; `esp` sits on `render` and
-still on `games::fc3`; `menu` is its sibling and they share `config`. No library
-contains a Windows entry point.
+on `render`, `menu` and `hook` and knows no game; `esp` and `aimbot` both sit
+still on `games::fc3`; `menu` is `esp`'s sibling and they share `config`. No
+library contains a Windows entry point.
 
 `dll/` is flat because there is one title in it. Each title gets its own DLL —
 the game is chosen at link time, never at run time — so a second one means a
@@ -504,15 +596,36 @@ Start Far Cry 3 (the DirectX 11 executable), then run `injector.exe` from the
 | Key / control | Effect |
 |---|---|
 | `INSERT` | shows and hides the menu; while it is up the game does not see the input the overlay consumes |
-| `ESP` checkbox | draws the entity boxes and the diagnostics panel, or neither |
-| `Unload` button | takes every hook back off and unloads the DLL from the running game |
+| `MOUSE 4`, held | steers the view onto the chosen target for as long as it is down |
+| `ESP` checkbox | draws the entity boxes, or nothing |
+| `debug panel` | the diagnostics window; off by default, it is scaffolding |
+| `aim boxes` | the cube marking where the shot is going — head on a man, spine on an animal |
+| `no recoil` / `no sway` / `no spread` / `infinite magazine` | byte patches, held only while ticked |
+| `auto fire` | pulls the trigger once the aim is inside its own cone |
+| `Unload` button | takes every hook and every patch back off and unloads the DLL |
 
-The `ESP` panel lists the whole camera pointer chain, the offsets it walked, the
-camera basis, both fields of view, the entity census and the projected marker
-positions — it is the first place to look when a box lands somewhere wrong.
+The aim settings are a cone, a range, a smoothing share, and the four weights the
+target choice is made of. The weights are the interesting part: reachability can
+be made to outrank everything else by giving it more than the other three can add
+up to, and setting the rest to zero reduces the whole thing to "whoever is
+nearest the crosshair".
+
+The `debug panel` lists the whole camera pointer chain, the offsets it walked,
+the camera basis, both fields of view, the entity census and the projected marker
+positions — it is the first place to look when a box lands somewhere wrong, and
+the reason the calibration markers in the screenshot exist.
 
 The DLL also writes `aimbot.dll.log` next to itself — the injection steps, then a
 status line every 1800 frames.
+
+Patches deserve one warning of their own. They are byte writes over the game's
+own instructions, found by signature rather than by address, and every one of
+them is put back the moment its toggle goes off or the DLL unloads. That is the
+whole safety story: nothing is patched permanently, and nothing is patched that
+cannot be found again on a different build. The signatures and the reasoning
+behind each patch live next to the offsets they use, in
+`include/afw/games/fc3/internal/layout.hpp`, which is the one place in the
+project where comments are not only allowed but the point.
 
 Unloading restores the window procedure and both hooked slots in the reverse
 order they went on, waits for the threads still inside a detour to leave, then
