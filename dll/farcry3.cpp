@@ -33,12 +33,91 @@ namespace {
 constexpr std::size_t kMessageChars{256};
 constexpr std::uint64_t kStatusInterval{1800};
 
+constexpr std::uint64_t kTraceInterval{60};
+constexpr float kTraceReach{100.0F};
+
+constexpr std::uint64_t kTraceWait{20};
+
+void LogAnswer(int query, const games::fc3::TraceAnswer& answer) {
+  std::array<char, kMessageChars> message{};
+  if (answer.hits == 0) {
+    std::snprintf(message.data(), message.size(),
+                  "[aimbot] trace %d: clear, nothing in the way\n", query);
+  } else {
+    std::snprintf(message.data(), message.size(),
+                  "[aimbot] trace %d: %u hit(s), first %.2f %.2f %.2f\n", query,
+                  answer.hits, static_cast<double>(answer.first.point.x),
+                  static_cast<double>(answer.first.point.y),
+                  static_cast<double>(answer.first.point.z));
+  }
+
+  app::Log(message.data());
+}
+
+// Puts one segment down the camera's own line and then waits for it: the engine
+// defers the walk, so the answer is not there on the next pass and the record
+// has to be asked for again until it is. Runs on the update thread because that
+// is where the game casts its own.
+void ProbeTrace() {
+  static std::uint64_t frames{0};
+  static std::optional<int> pending;
+  static std::uint64_t waited{0};
+
+  ++frames;
+  if (!config::Current().traceProbe.load()) {
+    pending.reset();
+    return;
+  }
+
+  if (pending) {
+    const std::optional<games::fc3::TraceAnswer> kAnswer{
+        games::fc3::TraceLook(*pending)};
+    ++waited;
+    if (kAnswer) {
+      LogAnswer(*pending, *kAnswer);
+      pending.reset();
+      return;
+    }
+    if (waited < kTraceWait) {
+      return;
+    }
+
+    std::array<char, kMessageChars> message{};
+    std::snprintf(message.data(), message.size(),
+                  "[aimbot] trace %d: never filed after %llu frames\n",
+                  *pending, kTraceWait);
+    app::Log(message.data());
+    pending.reset();
+    return;
+  }
+  if (frames % kTraceInterval != 0) {
+    return;
+  }
+
+  const std::expected<games::fc3::CameraBasis, std::error_code> kCamera{
+      games::fc3::ReadCamera()};
+  if (!kCamera) {
+    return;
+  }
+
+  pending = games::fc3::TraceSegment(
+      kCamera->position, kCamera->position + (kCamera->forward * kTraceReach));
+  waited = 0;
+  if (!pending) {
+    app::Log("[aimbot] trace: no collision world\n");
+  }
+}
+
+void UpdateReach() noexcept;
+
 void AFW_ENGINE_CALL RunAllGroupDetour(void* scheduler) {
   const app::DetourGuard kInside{};
 
   if (config::Current().espEnabled) {
     games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(scheduler));
   }
+  ProbeTrace();
+  UpdateReach();
 
   games::fc3::RunAllGroupFn original{games::fc3::OriginalRunAllGroup()};
   if (original != nullptr) {
@@ -86,7 +165,7 @@ constexpr float kDegreesPerRadian{57.2957795F};
   return wanted ? std::optional<float>{priority} : std::nullopt;
 }
 
-[[nodiscard]] std::optional<float> RankOf(
+[[nodiscard]] std::optional<float> PriorityOf(
     const games::fc3::EntityInfo& entity,
     const games::fc3::PawnInfo* self) noexcept {
   if (!entity.pawn || entity.pawn->dead) {
@@ -117,6 +196,49 @@ constexpr float kDegreesPerRadian{57.2957795F};
   }
 }
 
+// Collects whatever the engine has finished and asks again for whatever is due.
+// Runs on the update thread, which is where the game casts its own segments;
+// the assist only ever reads what this leaves behind.
+void UpdateReach() noexcept {
+  static std::uint64_t frames{0};
+  ++frames;
+
+  if (config::Current().aimWeightReach.load() <= 0.0F) {
+    return;
+  }
+
+  const std::expected<games::fc3::CameraBasis, std::error_code> kCamera{
+      games::fc3::ReadCamera()};
+  if (!kCamera) {
+    return;
+  }
+
+  const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
+  const games::fc3::PawnInfo* const kSelf{esp::FindSelf(kSnapshot)};
+  const float kRange{config::Current().aimRange.load()};
+
+  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
+    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+    // Only the kinds the assist is set to target. The engine keeps room for a
+    // few dozen answers at a time and spends most of it on the game's own
+    // shots, so asking about everything drawn would push those out. The cost of
+    // that thrift is a surprise: turn a kind off here and it stops being
+    // reported as blocked as well, because nothing is ever asked about it.
+    if (!PriorityOf(kEntity, kSelf)) {
+      continue;
+    }
+
+    const math::Vec3 kPoint{aimbot::AimPoint(kEntity)};
+    const float kSpan{(kPoint - kCamera->position).Length()};
+    if (kSpan > kRange) {
+      continue;
+    }
+
+    games::fc3::ObserveReach(kEntity.address, kCamera->position, kPoint,
+                             frames);
+  }
+}
+
 [[nodiscard]] std::optional<aimbot::Target> Pick(
     const games::fc3::EntitySnapshot& snapshot,
     const games::fc3::CameraBasis& camera) noexcept {
@@ -129,11 +251,18 @@ constexpr float kDegreesPerRadian{57.2957795F};
                   .distance = kSettings.aimWeightDistance.load(),
                   .priority = kSettings.aimWeightPriority.load()}};
 
-  return aimbot::ChooseTarget(snapshot, camera.position, camera.forward,
-                              kChoice,
-                              [kSelf](const games::fc3::EntityInfo& entity) {
-                                return RankOf(entity, kSelf);
-                              });
+  return aimbot::ChooseTarget(
+      snapshot, camera.position, camera.forward, kChoice,
+      [kSelf](const games::fc3::EntityInfo& entity) {
+        const std::optional<float> kPriority{PriorityOf(entity, kSelf)};
+        if (!kPriority) {
+          return std::optional<aimbot::Ranking>{};
+        }
+
+        return std::optional<aimbot::Ranking>{
+            aimbot::Ranking{.priority = *kPriority,
+                            .reach = games::fc3::ReachOf(entity.address)}};
+      });
 }
 
 [[nodiscard]] std::uintptr_t CameraState(

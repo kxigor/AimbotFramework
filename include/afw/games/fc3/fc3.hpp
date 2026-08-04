@@ -170,6 +170,48 @@ SuppressSpread() noexcept;
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code>
 SuppressSway() noexcept;
 
+// Puts a segment to the engine's own collision world and hands back the id it
+// filed the walk under. Absent when the world is not up, and on any build that
+// is not the game's own 32-bit one, where the call cannot be made at all.
+//
+// This is the one thing here that calls into the engine rather than reading it.
+[[nodiscard]] std::optional<int> TraceSegment(const Vec3& from,
+                                              const Vec3& target) noexcept;
+
+// Only the point is read. A hit record carries more -- the shot handler
+// resolves an entity out of it and asks which bone was struck -- but those
+// fields came back the same on a warrior, a car and a hillside, so whatever
+// they are, this has not identified them and will not pretend to.
+struct TraceHit {
+  Vec3 point{};
+};
+
+// A walk that has been done, and the nearest thing it ran into. No hits at all
+// is the useful answer rather than a failure: it means the segment reached the
+// far end without meeting anything, which is the whole question being asked.
+// `first` says nothing when `hits` is zero.
+struct TraceAnswer {
+  std::uint32_t hits{};
+  TraceHit first{};
+};
+
+// What that id found. Reading it is all memory and no call. Nothing at all
+// comes back while the walk is still outstanding -- the engine defers it, so an
+// answer takes a few frames rather than the next one -- and nothing comes back
+// once the record has been recycled either.
+[[nodiscard]] std::optional<TraceAnswer> TraceLook(int query) noexcept;
+
+// Keeps one standing answer per entity to whether a shot from `eye` would get
+// to `point`, asking the engine again whenever the last answer has gone stale.
+// Must be called from the thread the game runs its own queries on.
+void ObserveReach(std::uintptr_t entity, const Vec3& eye, const Vec3& point,
+                  std::uint64_t frame) noexcept;
+
+// The last answer, and 1 for anything never asked about. Optimistic on purpose:
+// a target nothing is known about yet is aimed at rather than passed over, and
+// a target is only written off once the engine has actually said so.
+[[nodiscard]] float ReachOf(std::uintptr_t entity) noexcept;
+
 [[nodiscard]] std::expected<Viewport, std::error_code> ReadViewport() noexcept;
 
 }  // namespace afw::games::fc3

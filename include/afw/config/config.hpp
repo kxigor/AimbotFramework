@@ -62,6 +62,12 @@ struct Settings {
   // down while it stays there, released the moment it does not, and never
   // pressed at all unless this window is the one with focus -- otherwise the
   // click lands in whatever you alt-tabbed to.
+  // Casts one segment through the engine's collision world each second and
+  // writes what came back to the log. Nothing else reads it: the shape of a
+  // result is not known yet, and this is how it gets learned. Off, because it
+  // is the first thing here that calls into the engine rather than reading it.
+  std::atomic<bool> traceProbe{false};
+
   std::atomic<bool> autoFire{false};
   std::atomic<float> autoFireCone{kDefaultAutoFireCone};
 
@@ -79,6 +85,10 @@ struct Settings {
   std::atomic<float> aimWeightAim{kMaxWeight};
   std::atomic<float> aimWeightDistance{0.0F};
   std::atomic<float> aimWeightPriority{0.0F};
+  // Whether a shot would reach the target at all, asked of the engine's own
+  // collision world. Costs a query per candidate, so it buys nothing until it
+  // is given weight.
+  std::atomic<float> aimWeightReach{0.0F};
 
   // What each kind is worth to the priority term. Only consulted when that
   // term carries weight.

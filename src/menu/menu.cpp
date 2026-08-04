@@ -35,6 +35,8 @@ void Slider(const char* label, std::atomic<float>& setting, float lowest,
   }
 }
 
+void ShowTargetChoice(config::Settings& settings);
+
 void ShowAimSettings(config::Settings& settings) {
   ImGui::SeparatorText("aim");
   Toggle("no recoil", settings.noRecoil);
@@ -54,6 +56,7 @@ void ShowAimSettings(config::Settings& settings) {
   Toggle("target birds", settings.aimBirds);
   Toggle("target vehicles", settings.aimVehicles);
 
+  Toggle("trace probe (writes to the log)", settings.traceProbe);
   Toggle("auto fire", settings.autoFire);
   if (settings.autoFire.load()) {
     Slider("fire cone", settings.autoFireCone, config::kMinAutoFireCone,
@@ -67,12 +70,18 @@ void ShowAimSettings(config::Settings& settings) {
   Slider("range", settings.aimRange, config::kMinAimRange, config::kMaxAimRange,
          "%.0f m");
 
+  ShowTargetChoice(settings);
+}
+
+void ShowTargetChoice(config::Settings& settings) {
   ImGui::SeparatorText("target choice");
   Slider("weight: aim", settings.aimWeightAim, 0.0F, config::kMaxWeight,
          "%.2f");
   Slider("weight: distance", settings.aimWeightDistance, 0.0F,
          config::kMaxWeight, "%.2f");
   Slider("weight: priority", settings.aimWeightPriority, 0.0F,
+         config::kMaxWeight, "%.2f");
+  Slider("weight: reachable (targeted kinds)", settings.aimWeightReach, 0.0F,
          config::kMaxWeight, "%.2f");
   if (settings.aimWeightPriority.load() > 0.0F) {
     Slider("priority: enemies", settings.aimPriorityEnemies, 0.0F,

@@ -12,6 +12,7 @@ add_library(afw_games_fc3 STATIC
   census.cpp
   error.cpp
   weapon.cpp
+  trace.cpp
 )
 add_library(afw::games::fc3 ALIAS afw_games_fc3)
 

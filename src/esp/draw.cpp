@@ -23,6 +23,7 @@ constexpr float kVehicleThickness{2.5F};
 constexpr float kLabelLift{14.0F};
 constexpr std::size_t kLabelChars{64};
 constexpr int kTriangleSides{3};
+constexpr std::uint32_t kBlockedColour{0xFF3030C0};
 constexpr float kHeadHalf{0.13F};
 constexpr float kHeadLift{0.10F};
 constexpr float kHeadThickness{1.0F};
@@ -61,6 +62,15 @@ void DrawAimBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
     return;
   }
 
+  // A target the engine says a shot would not get to is drawn in its own
+  // colour, so that what the assist is doing about cover can be seen rather
+  // than taken on trust. Only asked once reachability carries weight, because
+  // nothing is asked of the engine before that.
+  const ImU32 kInk{(config::Current().aimWeightReach.load() > 0.0F &&
+                    games::fc3::ReachOf(entity.address) <= 0.0F)
+                       ? kBlockedColour
+                       : colour};
+
   const Vec3 kCentre{
       entity.head ? *kBone + (entity.transform.Row(2) * kHeadLift) : *kBone};
   const std::optional<ScreenRect> kRect{
@@ -72,7 +82,7 @@ void DrawAimBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,
 
   ImGui::GetBackgroundDrawList()->AddRect(ImVec2{kRect->left, kRect->top},
                                           ImVec2{kRect->right, kRect->bottom},
-                                          colour, 0.0F, 0, kHeadThickness);
+                                          kInk, 0.0F, 0, kHeadThickness);
 }
 
 void DrawBox(const games::fc3::EntityInfo& entity, const Matrix4& projection,

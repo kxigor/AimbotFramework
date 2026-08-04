@@ -21,6 +21,16 @@ struct Target {
   float distance{};
   // What the caller said this kind of target is worth to it.
   float priority{};
+  // Whether a shot would get there at all.
+  float reach{};
+};
+
+// What the caller thinks of one candidate. Reach is separate from priority
+// because they answer different questions -- what a target is worth, and
+// whether it can be hit -- and each carries its own weight.
+struct Ranking {
+  float priority{};
+  float reach{1.0F};
 };
 
 // What is allowed to be considered. Anything past either of these is not a near
@@ -60,6 +70,7 @@ struct Weights {
   float aim{1.0F};
   float distance{};
   float priority{};
+  float reach{};
 };
 
 // Everything the choice turns on: who may be considered at all, and how those
@@ -82,8 +93,8 @@ template <typename Rank>
 [[nodiscard]] std::optional<Target> Considered(
     const games::fc3::EntityInfo& entity, const Vec3& eye, const Vec3& forward,
     const Limits& limits, Rank rank) noexcept {
-  const std::optional<float> kPriority{rank(entity)};
-  if (!kPriority) {
+  const std::optional<Ranking> kRanking{rank(entity)};
+  if (!kRanking) {
     return std::nullopt;
   }
 
@@ -103,7 +114,8 @@ template <typename Rank>
                 .point = kPoint,
                 .error = kError,
                 .distance = kDistance,
-                .priority = *kPriority};
+                .priority = kRanking->priority,
+                .reach = kRanking->reach};
 }
 
 [[nodiscard]] inline float ScoreOf(const Choice& choice,
@@ -111,7 +123,8 @@ template <typename Rank>
   return (choice.weights.aim * Nearness(target.error, choice.limits.maxError)) +
          (choice.weights.distance *
           Nearness(target.distance, choice.limits.maxDistance)) +
-         (choice.weights.priority * target.priority);
+         (choice.weights.priority * target.priority) +
+         (choice.weights.reach * target.reach);
 }
 
 // Ranked, not merely filtered: every candidate inside the cone is scored and
