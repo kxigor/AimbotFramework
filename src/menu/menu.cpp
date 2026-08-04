@@ -38,6 +38,8 @@ void Slider(const char* label, std::atomic<float>& setting, float lowest,
 void ShowAimSettings(config::Settings& settings) {
   ImGui::SeparatorText("aim");
   Toggle("no recoil", settings.noRecoil);
+  Toggle("no sway", settings.noSway);
+  Toggle("no spread", settings.noSpread);
 
   bool enabled{settings.aimEnabled.load()};
   if (ImGui::Checkbox("aim assist (hold mouse 4)", &enabled)) {
@@ -51,6 +53,11 @@ void ShowAimSettings(config::Settings& settings) {
   Toggle("target animals", settings.aimAnimals);
   Toggle("target birds", settings.aimBirds);
   Toggle("target vehicles", settings.aimVehicles);
+  Toggle("lead moving targets", settings.aimLead);
+  if (settings.aimLead.load()) {
+    Slider("bullet speed", settings.aimBulletSpeed, config::kMinBulletSpeed,
+           config::kMaxBulletSpeed, "%.0f m/s");
+  }
   Slider("smoothing", settings.aimSmoothing, config::kMinAimSmoothing,
          config::kMaxAimSmoothing, "%.2f");
   Slider("cone", settings.aimConeDegrees, config::kMinAimCone,

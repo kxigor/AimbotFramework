@@ -48,6 +48,7 @@ void AFW_ENGINE_CALL RunAllGroupDetour(void* scheduler) {
 
 constexpr int kAimKey{VK_XBUTTON1};
 constexpr float kDegreesPerRadian{57.2957795F};
+constexpr float kMaxFrameSeconds{0.25F};
 
 [[nodiscard]] bool IsHeld(int key) noexcept {
   constexpr unsigned kDownBit{0x8000U};
@@ -118,7 +119,7 @@ constexpr float kDegreesPerRadian{57.2957795F};
     const games::fc3::EntitySnapshot& snapshot,
     const math::Vec3& forward) noexcept {
   if (CameraStateCache() != 0 &&
-      games::fc3::ReadViewAngles(CameraStateCache())) {
+      games::fc3::ReproducesTheView(CameraStateCache(), forward)) {
     return CameraStateCache();
   }
 
@@ -154,6 +155,44 @@ void SteadyAim() noexcept {
   }
 }
 
+[[nodiscard]] aimbot::MotionTable& Motion() noexcept {
+  static aimbot::MotionTable table{};
+  return table;
+}
+
+[[nodiscard]] float FrameSeconds() noexcept {
+  static LARGE_INTEGER previous{};
+  LARGE_INTEGER frequency{};
+  LARGE_INTEGER now{};
+  if (QueryPerformanceFrequency(&frequency) == FALSE ||
+      QueryPerformanceCounter(&now) == FALSE || frequency.QuadPart == 0) {
+    return 0.0F;
+  }
+
+  const std::int64_t kTicks{now.QuadPart - previous.QuadPart};
+  previous = now;
+  if (previous.QuadPart == now.QuadPart && kTicks == now.QuadPart) {
+    return 0.0F;
+  }
+
+  const float kSeconds{static_cast<float>(
+      static_cast<double>(kTicks) / static_cast<double>(frequency.QuadPart))};
+
+  return (kSeconds > 0.0F && kSeconds < kMaxFrameSeconds) ? kSeconds : 0.0F;
+}
+
+[[nodiscard]] math::Vec3 WhereToShoot(const aimbot::Target& target) noexcept {
+  Motion().Observe(target.entity, target.point, FrameSeconds());
+  if (!config::Current().aimLead.load()) {
+    return target.point;
+  }
+
+  return aimbot::Lead(
+      target.point, Motion().VelocityOf(target.entity),
+      aimbot::TravelTime(target.distance,
+                         config::Current().aimBulletSpeed.load()));
+}
+
 void AimAt(std::uintptr_t state, const games::fc3::EntitySnapshot& snapshot,
            const games::fc3::CameraBasis& camera) noexcept {
   const std::optional<math::ViewAngles> kCurrent{
@@ -164,7 +203,7 @@ void AimAt(std::uintptr_t state, const games::fc3::EntitySnapshot& snapshot,
   }
 
   const math::ViewAngles kWanted{
-      games::fc3::ViewAnglesTo(kTarget->point - camera.position)};
+      games::fc3::ViewAnglesTo(WhereToShoot(*kTarget) - camera.position)};
   const math::ViewAngles kStep{
       aimbot::Share(aimbot::Difference(*kCurrent, kWanted),
                     config::Current().aimSmoothing.load())};

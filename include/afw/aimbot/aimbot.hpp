@@ -3,6 +3,8 @@
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/math/vec3.hpp>
+#include <array>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 
@@ -48,6 +50,53 @@ struct Limits {
 // centre is a fallback rather than a choice: it is the only point there is for
 // an entity whose bones could not be read.
 [[nodiscard]] Vec3 AimPoint(const games::fc3::EntityInfo& entity) noexcept;
+
+// Where a point travelling at `velocity` will be once a shot has had time to
+// arrive. Aiming at where a target stands is aiming behind it: the correction
+// is computed, applied over several frames, and by the time the shot leaves,
+// the target has walked out of it.
+[[nodiscard]] Vec3 Lead(const Vec3& point, const Vec3& velocity,
+                        float seconds) noexcept;
+
+// How long a shot needs to cross `distance`. Zero or a nonsense speed means no
+// lead at all rather than an infinite one.
+[[nodiscard]] float TravelTime(float distance, float speed) noexcept;
+
+// Faster than anything in this world actually travels, so a step implying more
+// than this is not movement: a corpse going to ragdoll throws its head bone
+// across a frame, and a fresh entity reusing a dead one's address looks like a
+// jump across the map. Believing either of those aims somewhere else entirely.
+constexpr float kMaxTargetSpeed{60.0F};
+
+// One target's movement, remembered between frames. Velocity is only believed
+// once two positions have been seen for the same entity: the first sighting has
+// nothing to difference against, and an entity reusing a dead one's address
+// would otherwise appear to cross the map in a frame.
+struct Motion {
+  std::uintptr_t entity{};
+  Vec3 point{};
+  Vec3 velocity{};
+  bool settled{};
+};
+
+// Keeps one row per target and turns successive positions into a velocity.
+// Rows are matched by entity address and evicted by age, so a world larger than
+// the table degrades to no lead rather than to a wrong one.
+class MotionTable {
+ public:
+  static constexpr std::size_t kRows{64};
+
+  void Observe(std::uintptr_t entity, const Vec3& point,
+               float seconds) noexcept;
+
+  [[nodiscard]] Vec3 VelocityOf(std::uintptr_t entity) const noexcept;
+
+  void Forget() noexcept;
+
+ private:
+  std::array<Motion, kRows> rows_{};
+  std::size_t next_{};
+};
 
 // Scored on how far the eye already points at it, so the winner is whoever the
 // player is closest to aiming at. Distance decides only whether an entity is

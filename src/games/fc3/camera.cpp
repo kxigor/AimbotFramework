@@ -16,14 +16,20 @@
 
 namespace afw::games::fc3 {
 
-namespace {
+ViewAngles ViewAnglesTo(const Vec3& direction) noexcept {
+  const Vec3 kUnit{direction.Normalised()};
 
-[[nodiscard]] bool ReproducesTheView(std::uintptr_t angles,
-                                     const Vec3& forward) noexcept {
+  return ViewAngles{
+      .yaw = math::WrapAngle(std::atan2(kUnit.y, kUnit.x) - math::kQuarterTurn),
+      .pitch = std::asin(std::clamp(kUnit.z, -1.0F, 1.0F))};
+}
+
+bool ReproducesTheView(std::uintptr_t state, const Vec3& forward) noexcept {
+  const std::uintptr_t kAngles{state + kCameraAnglesA};
   const std::expected<float, std::error_code> kPitch{
-      process::ReadAt<float>(angles + kViewAnglePitch)};
+      process::ReadAt<float>(kAngles + kViewAnglePitch)};
   const std::expected<float, std::error_code> kYaw{
-      process::ReadAt<float>(angles + kViewAngleYaw)};
+      process::ReadAt<float>(kAngles + kViewAngleYaw)};
   if (!kPitch || !kYaw || !std::isfinite(*kPitch) || !std::isfinite(*kYaw)) {
     return false;
   }
@@ -33,16 +39,6 @@ namespace {
   return std::fabs(math::WrapAngle(*kPitch - kWanted.pitch)) <
              kViewAngleAgreement &&
          std::fabs(math::WrapAngle(*kYaw - kWanted.yaw)) < kViewAngleAgreement;
-}
-
-}  // namespace
-
-ViewAngles ViewAnglesTo(const Vec3& direction) noexcept {
-  const Vec3 kUnit{direction.Normalised()};
-
-  return ViewAngles{
-      .yaw = math::WrapAngle(std::atan2(kUnit.y, kUnit.x) - math::kQuarterTurn),
-      .pitch = std::asin(std::clamp(kUnit.z, -1.0F, 1.0F))};
 }
 
 std::optional<std::uintptr_t> FindViewAngles(std::uintptr_t playerEntity,
@@ -68,7 +64,7 @@ std::optional<std::uintptr_t> FindViewAngles(std::uintptr_t playerEntity,
     if (!kState || *kState == 0) {
       continue;
     }
-    if (ReproducesTheView(*kState + kCameraAnglesA, forward)) {
+    if (ReproducesTheView(*kState, forward)) {
       return *kState;
     }
   }

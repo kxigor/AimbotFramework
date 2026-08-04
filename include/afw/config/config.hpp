@@ -15,6 +15,10 @@ constexpr float kMinAimSmoothing{0.02F};
 constexpr float kMaxAimSmoothing{1.0F};
 constexpr float kMinAimCone{1.0F};
 constexpr float kMaxAimCone{90.0F};
+constexpr float kDefaultBulletSpeed{250.0F};
+constexpr float kMinBulletSpeed{50.0F};
+constexpr float kMaxBulletSpeed{1200.0F};
+
 constexpr float kMinAimRange{10.0F};
 constexpr float kMaxAimRange{300.0F};
 
@@ -40,6 +44,10 @@ struct Settings {
   std::atomic<bool> aimBirds{false};
   std::atomic<bool> aimVehicles{false};
   std::atomic<bool> noRecoil{false};
+  std::atomic<bool> noSway{false};
+  std::atomic<bool> noSpread{false};
+  std::atomic<bool> aimLead{true};
+  std::atomic<float> aimBulletSpeed{kDefaultBulletSpeed};
   // The fraction of the remaining correction applied each frame. At 1 the view
   // snaps, which no hand does.
   std::atomic<float> aimSmoothing{kDefaultAimSmoothing};

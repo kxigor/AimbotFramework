@@ -139,6 +139,13 @@ struct EntitySnapshot {
 [[nodiscard]] std::optional<std::uintptr_t> FindViewAngles(
     std::uintptr_t playerEntity, const Vec3& forward) noexcept;
 
+// The same agreement asked again of a state found earlier. Dying frees the
+// entity the camera hung off, and the floats left behind at that address stay
+// readable and finite, so a check that only reads them keeps a dead object
+// forever and the view stops answering with nothing to say why.
+[[nodiscard]] bool ReproducesTheView(std::uintptr_t state,
+                                     const Vec3& forward) noexcept;
+
 [[nodiscard]] std::optional<ViewAngles> ReadViewAngles(
     std::uintptr_t state) noexcept;
 

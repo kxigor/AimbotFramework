@@ -137,6 +137,63 @@ TEST(AimbotAimPoint, FallsBackToTheMiddleOfTheBox) {
   EXPECT_FLOAT_EQ(AimPoint(kEntity).z, 0.9F);
 }
 
+TEST(AimbotLead, PutsTheAimWhereTheTargetWillBe) {
+  const Vec3 kPoint{.x = 10.0F, .y = 0.0F, .z = 1.6F};
+  const Vec3 kWalking{.x = 0.0F, .y = 4.0F, .z = 0.0F};
+
+  EXPECT_FLOAT_EQ(afw::aimbot::Lead(kPoint, kWalking, 0.5F).y, 2.0F);
+}
+
+// A standing target, a shot that takes no time, or a velocity that is not a
+// number must all leave the aim exactly where it was.
+TEST(AimbotLead, LeavesTheAimAloneWhenThereIsNothingToLead) {
+  const Vec3 kPoint{.x = 10.0F, .y = 0.0F, .z = 1.6F};
+
+  EXPECT_FLOAT_EQ(afw::aimbot::Lead(kPoint, Vec3{}, 0.5F).y, 0.0F);
+  EXPECT_FLOAT_EQ(afw::aimbot::Lead(kPoint, Vec3{.x = 0.0F, .y = 4.0F}, 0.0F).y,
+                  0.0F);
+  EXPECT_FLOAT_EQ(afw::aimbot::Lead(kPoint, Vec3{.x = 0.0F, .y = 4.0F},
+                                    std::numeric_limits<float>::quiet_NaN())
+                      .y,
+                  0.0F);
+}
+
+TEST(AimbotLead, TurnsDistanceIntoFlightTime) {
+  EXPECT_FLOAT_EQ(afw::aimbot::TravelTime(100.0F, 250.0F), 0.4F);
+  EXPECT_FLOAT_EQ(afw::aimbot::TravelTime(100.0F, 0.0F), 0.0F);
+  EXPECT_FLOAT_EQ(afw::aimbot::TravelTime(-1.0F, 250.0F), 0.0F);
+}
+
+// The first sighting has nothing to difference against, so it must report no
+// movement rather than a jump from the origin.
+TEST(AimbotLead, WaitsForASecondSightingBeforeBelievingAVelocity) {
+  afw::aimbot::MotionTable table{};
+  table.Observe(0xA, Vec3{.x = 0.0F, .y = 0.0F, .z = 0.0F}, 0.1F);
+
+  EXPECT_FLOAT_EQ(table.VelocityOf(0xA).y, 0.0F);
+
+  table.Observe(0xA, Vec3{.x = 0.0F, .y = 0.4F, .z = 0.0F}, 0.1F);
+
+  EXPECT_NEAR(table.VelocityOf(0xA).y, 4.0F, kTolerance);
+  EXPECT_FLOAT_EQ(table.VelocityOf(0xB).y, 0.0F);
+}
+
+// Killing a target sends it to ragdoll and its head bone travels further in one
+// frame than anybody walks in a second. Believing that threw the aim right off
+// the target it had just killed, which is the bug this guards.
+TEST(AimbotLead, RefusesAStepNothingCouldHaveWalked) {
+  afw::aimbot::MotionTable table{};
+  table.Observe(0xA, Vec3{.x = 0.0F, .y = 0.0F, .z = 1.6F}, 0.016F);
+  table.Observe(0xA, Vec3{.x = 0.0F, .y = 0.4F, .z = 1.6F}, 0.016F);
+
+  ASSERT_GT(table.VelocityOf(0xA).y, 0.0F);
+
+  table.Observe(0xA, Vec3{.x = 0.0F, .y = 40.0F, .z = 0.2F}, 0.016F);
+
+  EXPECT_FLOAT_EQ(table.VelocityOf(0xA).y, 0.0F);
+  EXPECT_FLOAT_EQ(table.VelocityOf(0xA).z, 0.0F);
+}
+
 class AimbotChoice : public ::testing::Test {
  protected:
   void Add(std::uintptr_t address, const Vec3& position) {
