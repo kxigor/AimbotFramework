@@ -170,6 +170,19 @@ SuppressSpread() noexcept;
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code>
 SuppressSway() noexcept;
 
+// Stops the magazine losing what is fired out of it. Reloading and picking a
+// weapon up still fill it: only the fall is ignored, never the rise. Held for
+// as long as the returned patch is alive; letting it go puts the game's own
+// bytes back.
+[[nodiscard]] std::expected<hook::CodePatch, std::error_code>
+IgnoreSpentRounds() noexcept;
+
+// Stops the shot handler refusing to fire on an empty magazine. Worth holding
+// alongside the one above rather than instead of it: that one keeps the count
+// up, this one covers whatever else might still look at it and find it empty.
+[[nodiscard]] std::expected<hook::CodePatch, std::error_code>
+IgnoreEmptyMagazine() noexcept;
+
 // Puts a segment to the engine's own collision world and hands back the id it
 // filed the walk under. Absent when the world is not up, and on any build that
 // is not the game's own 32-bit one, where the call cannot be made at all.

@@ -7,7 +7,16 @@ namespace afw::config {
 // What the overlay is allowed to draw, one flag per kind. The dead are not on
 // this list on purpose: a corpse keeps the flag of whatever it was, so hiding
 // it would take an entry away from the kind it belongs to.
-constexpr float kDefaultAimSmoothing{0.35F};
+// Snapping, because the correction is wanted where it was asked for rather
+// than a few frames later.
+constexpr float kDefaultAimSmoothing{1.0F};
+
+// Reachability outranks everything: the other three cannot add up past it, so
+// a target a shot would get to always beats one it would not, however well
+// placed. What is left ranks the reachable ones among themselves.
+constexpr float kDefaultWeightAim{0.60F};
+constexpr float kDefaultWeightPriority{0.30F};
+constexpr float kDefaultWeightDistance{0.05F};
 // The whole cone, not half of it, which is why the default is twice what the
 // half-angle used to be. At 360 nothing is outside it and the assist considers
 // the entire world, including whoever is behind you.
@@ -47,6 +56,10 @@ struct Settings {
   // Everything the engine would not name. Off by default: it is most of the
   // world, and near the player it is mostly your own equipment.
   std::atomic<bool> espProps{false};
+  // The debugging window: chain diagnostics, camera numbers, pool and entity
+  // counts. Off, because the overlay is the point and this is the scaffolding
+  // that was needed to build it.
+  std::atomic<bool> espPanel{false};
 
   // Held rather than toggled, so the view is the player's again the moment the
   // button comes up.
@@ -58,6 +71,7 @@ struct Settings {
   std::atomic<bool> noRecoil{false};
   std::atomic<bool> noSway{false};
   std::atomic<bool> noSpread{false};
+  std::atomic<bool> infiniteAmmo{false};
   // Pulls the trigger once the aim is inside autoFireCone of the target. Held
   // down while it stays there, released the moment it does not, and never
   // pressed at all unless this window is the one with focus -- otherwise the
@@ -82,13 +96,13 @@ struct Settings {
   // weights are comparable and any of them may be turned off on its own. With
   // only aimWeightAim set this picks whoever the eye already points nearest to,
   // which is what it did before there was a formula.
-  std::atomic<float> aimWeightAim{kMaxWeight};
-  std::atomic<float> aimWeightDistance{0.0F};
-  std::atomic<float> aimWeightPriority{0.0F};
+  std::atomic<float> aimWeightAim{kDefaultWeightAim};
+  std::atomic<float> aimWeightDistance{kDefaultWeightDistance};
+  std::atomic<float> aimWeightPriority{kDefaultWeightPriority};
   // Whether a shot would reach the target at all, asked of the engine's own
   // collision world. Costs a query per candidate, so it buys nothing until it
   // is given weight.
-  std::atomic<float> aimWeightReach{0.0F};
+  std::atomic<float> aimWeightReach{kMaxWeight};
 
   // What each kind is worth to the priority term. Only consulted when that
   // term carries weight.

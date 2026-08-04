@@ -297,6 +297,16 @@ void UpdateReach() noexcept {
   return patch;
 }
 
+[[nodiscard]] std::optional<hook::CodePatch>& AmmoPatch() noexcept {
+  static std::optional<hook::CodePatch> patch;
+  return patch;
+}
+
+[[nodiscard]] std::optional<hook::CodePatch>& MagazinePatch() noexcept {
+  static std::optional<hook::CodePatch> patch;
+  return patch;
+}
+
 using PatchSource =
     std::expected<hook::CodePatch, std::error_code> (*)() noexcept;
 
@@ -324,6 +334,10 @@ void SteadyAim() noexcept {
   HoldPatch(SpreadPatch(), kSettings.noSpread.load(),
             &games::fc3::SuppressSpread);
   HoldPatch(SwayPatch(), kSettings.noSway.load(), &games::fc3::SuppressSway);
+  HoldPatch(MagazinePatch(), kSettings.infiniteAmmo.load(),
+            &games::fc3::IgnoreSpentRounds);
+  HoldPatch(AmmoPatch(), kSettings.infiniteAmmo.load(),
+            &games::fc3::IgnoreEmptyMagazine);
 }
 
 void AimAt(std::uintptr_t state, const aimbot::Target& target,

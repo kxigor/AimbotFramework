@@ -42,6 +42,7 @@ void ShowAimSettings(config::Settings& settings) {
   Toggle("no recoil", settings.noRecoil);
   Toggle("no sway", settings.noSway);
   Toggle("no spread", settings.noSpread);
+  Toggle("infinite magazine", settings.infiniteAmmo);
 
   bool enabled{settings.aimEnabled.load()};
   if (ImGui::Checkbox("aim assist (hold mouse 4)", &enabled)) {
@@ -158,6 +159,7 @@ void Draw() noexcept {
     Toggle("birds", settings.espBirds);
     Toggle("vehicles", settings.espVehicles);
     Toggle("props", settings.espProps);
+    Toggle("debug panel", settings.espPanel);
     Toggle("aim boxes (head / spine)", settings.espAimBoxes);
   }
 

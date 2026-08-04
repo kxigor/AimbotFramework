@@ -54,54 +54,69 @@ void ShowPanelBody(const Vec3& eye, const Vec3& forward, const ImVec2& display,
 
 }  // namespace
 
+// Scaffolding: chain diagnostics, the camera's own numbers, pool and entity
+// counts. Everything the overlay is actually for is drawn without it, which is
+// why it is off unless asked for.
+void ShowPanel(const games::fc3::CameraBasis& camera, const ImVec2& display,
+               const Markers& markers) {
+  const float kAspect{display.x / display.y};
+
+  ImGui::SetNextWindowSize(ImVec2{kPanelWidth, kPanelHeight},
+                           ImGuiCond_FirstUseEver);
+  ImGui::Begin("ESP");
+  ShowChain(games::fc3::Diagnostics::Read(), display);
+  ImGui::SeparatorText("camera");
+  ShowCamera(camera, camera.right, kAspect,
+             VerticalFov(camera.fovHorizontalRadians, kAspect));
+  ShowPanelBody(camera.position, camera.forward, display, markers);
+  ImGui::End();
+}
+
+void ShowNoCamera(const char* reason) {
+  ImGui::Begin("ESP");
+  ImGui::TextUnformatted(reason);
+  ImGui::End();
+}
+
 void DrawFrame() noexcept {
   if (!config::Current().espEnabled) {
     return;
   }
 
+  const bool kPanel{config::Current().espPanel.load()};
   const ImVec2 kDisplay{ImGui::GetIO().DisplaySize};
-
-  ImGui::SetNextWindowSize(ImVec2{kPanelWidth, kPanelHeight},
-                           ImGuiCond_FirstUseEver);
-  ImGui::Begin("ESP");
-  ShowChain(games::fc3::Diagnostics::Read(), kDisplay);
-  ImGui::SeparatorText("camera");
-
   const std::expected<games::fc3::CameraBasis, std::error_code> kCamera{
       games::fc3::ReadCamera()};
   if (!kCamera) {
-    ImGui::TextUnformatted(kCamera.error().message().c_str());
-    ImGui::End();
+    if (kPanel) {
+      ShowNoCamera(kCamera.error().message().c_str());
+    }
     return;
   }
   if (kDisplay.x <= 0.0F || kDisplay.y <= 0.0F) {
-    ImGui::TextUnformatted("the imgui display size is empty");
-    ImGui::End();
+    if (kPanel) {
+      ShowNoCamera("the imgui display size is empty");
+    }
     return;
   }
 
-  const Vec3 kEye{kCamera->position};
-  const Vec3 kForward{kCamera->forward};
-  const Vec3 kRight{kCamera->right};
   const float kAspect{kDisplay.x / kDisplay.y};
   const float kVerticalFov{VerticalFov(kCamera->fovHorizontalRadians, kAspect)};
-  ShowCamera(*kCamera, kRight, kAspect, kVerticalFov);
-
   const Matrix4 kViewProjection{
-      Multiply(BuildView(kEye, kForward, kCamera->upAxis, kRight),
+      Multiply(BuildView(kCamera->position, kCamera->forward, kCamera->upAxis,
+                         kCamera->right),
                BuildProjection(kVerticalFov, kAspect, kNearPlane, kFarPlane))};
+  const Markers kMarkers{ProjectMarkers(kViewProjection, kCamera->position,
+                                        kCamera->forward, kCamera->right,
+                                        kDisplay)};
 
-  const Markers kMarkers{
-      ProjectMarkers(kViewProjection, kEye, kForward, kRight, kDisplay)};
+  if (kPanel) {
+    ShowPanel(*kCamera, kDisplay, kMarkers);
+  }
 
-  ShowPanelBody(kEye, kForward, kDisplay, kMarkers);
-  ImGui::End();
-
-  DrawEntities(kEye, kViewProjection, kDisplay);
-
+  DrawEntities(kCamera->position, kViewProjection, kDisplay);
   DrawAimCone(kDisplay, kVerticalFov);
   DrawCrosshair(kMarkers.ahead, kAheadColour);
-  DrawMarker(kMarkers.probe, kRightColour);
 }
 
 }  // namespace afw::esp

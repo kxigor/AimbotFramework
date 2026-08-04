@@ -146,6 +146,36 @@ constexpr std::uint32_t kSpineOneBoneKey{0x8F39FA4E};
 // `delta` is the segment's vector and not its far end -- the walk runs from
 // `from` to `from + delta`. Nothing here knows yet what the query writes into
 // `out`; finding that out is what the probe is for.
+// The shot handler asks its fire strategy whether this shot needs a round, and
+// only then looks at AmmoInClip. Erasing the look leaves the flags standing
+// from the TEST AL,AL that got here, and on this path AL is what carried the
+// branch, so it cannot be zero -- the JNZ after it therefore always takes the
+// firing road and the magazine is never found empty.
+//
+// Nothing else is touched: rounds still leave the magazine, reloads still
+// happen, the count on screen still falls. What goes is the refusal to fire at
+// the bottom of it.
+// AmmoInClip has one setter, at 0x10417dda, and it is the only thing that
+// writes the field -- which is why searching the image for a store through
+// +0xCC finds nothing: the setter takes the address into EAX first and writes
+// through that. A hardware watchpoint on the field found it in one burst.
+//
+// It already compares the incoming value with the standing one, to decide
+// whether anything needs marking as changed. Turning that comparison's jump
+// from "equal, skip the marking" into "less, skip the write" costs two bytes
+// and leaves everything else alone: a round spent is ignored, while a reload
+// or a fresh weapon, which raise the count, still go through. Erasing the
+// write instead would have frozen the magazine wherever it stood, including
+// at zero.
+constexpr const char* kAmmoStoreSignature{
+    "55 8B EC 8B 55 08 8D 81 CC 00 00 00 3B 10 74 07 8B 49 60 C6 41 44 01 89 "
+    "10"};
+constexpr std::uintptr_t kAmmoStorePatchOffset{0x0E};
+
+constexpr const char* kAmmoCheckSignature{
+    "8B 8E E8 00 00 00 8B 01 FF 50 68 84 C0 74 24 83 BE CC 00 00 00 00 75 1B"};
+constexpr std::uintptr_t kAmmoCheckPatchOffset{0x0F};
+
 constexpr std::uintptr_t kCollisionQueryWorld{0x11E660BC};
 constexpr std::uintptr_t kSegmentQuery{0x10761940};
 
