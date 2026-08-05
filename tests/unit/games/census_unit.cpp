@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/limits.hpp>
 #include <cstdint>
 #include <support/fc3_world.hpp>
 #include <tuple>
@@ -8,8 +9,6 @@
 namespace {
 
 using afw::testing::Fc3World;
-
-constexpr std::uint32_t kMaxGroups{256};
 
 class Fc3CensusUnit : public Fc3World {};
 
@@ -98,7 +97,7 @@ TEST_F(Fc3CensusUnit, AnImplausibleGroupCountIsCapped) {
   const afw::games::fc3::EntityCensus kCensus{
       Walk(At(afw::testing::kScheduler))};
 
-  EXPECT_EQ(kCensus.skipped, kAbsurd - kMaxGroups);
+  EXPECT_EQ(kCensus.skipped, kAbsurd - afw::games::fc3::kMaxGroups);
 }
 
 }  // namespace

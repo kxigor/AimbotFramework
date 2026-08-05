@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace afw::games::fc3 {
 
@@ -103,5 +104,10 @@ struct EntitySnapshot {
 };
 
 [[nodiscard]] const EntitySnapshot& LastSnapshot() noexcept;
+
+[[nodiscard]] inline std::span<const EntityInfo> Entities(
+    const EntitySnapshot& snapshot) noexcept {
+  return {snapshot.items.data(), snapshot.count};
+}
 
 }  // namespace afw::games::fc3

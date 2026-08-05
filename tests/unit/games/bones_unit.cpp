@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
-#include <afw/games/fc3/internal/entity.hpp>
+#include <afw/games/fc3/internal/bones.hpp>
+#include <afw/games/fc3/internal/components.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <cstdint>
 #include <support/fc3_world.hpp>

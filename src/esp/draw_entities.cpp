@@ -131,8 +131,8 @@ void DrawEntities(const math::Vec3& eye, const math::Matrix4& projection,
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
 
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
     if ((kEntity.transform.Translation() - eye).Length() > kDrawDistance) {
       continue;
     }

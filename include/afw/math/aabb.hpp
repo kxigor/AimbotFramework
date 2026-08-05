@@ -1,5 +1,6 @@
 #pragma once
 
+#include <afw/math/angle.hpp>
 #include <afw/math/vec3.hpp>
 #include <cstddef>
 #include <type_traits>
@@ -8,8 +9,6 @@ namespace afw::math {
 
 constexpr std::size_t kAabbCorners{8};
 
-constexpr float kHalfSpan{0.5F};
-
 constexpr std::size_t kCornerBitX{1U};
 constexpr std::size_t kCornerBitY{2U};
 constexpr std::size_t kCornerBitZ{4U};
@@ -17,7 +16,7 @@ constexpr std::size_t kCornerBitZ{4U};
 struct Aabb {
   [[nodiscard]] Vec3 Extent() const noexcept { return max - min; }
 
-  [[nodiscard]] Vec3 Centre() const noexcept { return (min + max) * kHalfSpan; }
+  [[nodiscard]] Vec3 Centre() const noexcept { return (min + max) * kHalf; }
 
   [[nodiscard]] bool IsValid(float maxSpan) const noexcept {
     const Vec3 kExtent{Extent()};

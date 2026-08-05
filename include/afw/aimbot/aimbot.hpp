@@ -92,9 +92,9 @@ template <typename Rank>
   std::optional<Target> best;
   float bestScore{};
 
-  for (std::uint32_t index{0}; index < snapshot.count; ++index) {
-    const std::optional<Target> kCandidate{Considered(
-        snapshot.items.at(index), eye, forward, choice.limits, rank)};
+  for (const games::fc3::EntityInfo& kEntity : games::fc3::Entities(snapshot)) {
+    const std::optional<Target> kCandidate{
+        Considered(kEntity, eye, forward, choice.limits, rank)};
     if (!kCandidate) {
       continue;
     }

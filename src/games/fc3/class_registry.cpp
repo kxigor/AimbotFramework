@@ -1,6 +1,5 @@
 #include <afw/abi/abi.hpp>
 #include <afw/games/fc3/internal/class_registry.hpp>
-#include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>

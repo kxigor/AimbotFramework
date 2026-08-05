@@ -2,8 +2,8 @@
 #include <afw/games/fc3/internal/agent.hpp>
 #include <afw/games/fc3/internal/class_registry.hpp>
 #include <afw/games/fc3/internal/components.hpp>
-#include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
+#include <afw/games/fc3/internal/pawn.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/module.hpp>
 #include <array>
@@ -23,25 +23,9 @@ constexpr std::array<AgentKind, kAgentKindCount> kAgentKinds{
 
 [[nodiscard]] std::optional<std::uintptr_t> AgentFromComponents(
     std::uintptr_t address) noexcept {
-  const std::optional<EngineArray> kParts{Components(address)};
-  if (!kParts) {
-    return std::nullopt;
-  }
-
-  for (std::uint32_t index{0}; index < kParts->Size(); ++index) {
-    const std::optional<std::uintptr_t> kPart{kParts->Slot(index)};
-    if (!kPart) {
-      continue;
-    }
-
-    const std::optional<std::uintptr_t> kAgent{
-        Engine{*kPart}.Pointer(kComponentAgent)};
-    if (kAgent) {
-      return kAgent;
-    }
-  }
-
-  return std::nullopt;
+  return FirstComponent(address, [](std::uintptr_t part) {
+    return Engine{part}.Pointer(kComponentAgent);
+  });
 }
 
 [[nodiscard]] bool WouldBuildHashTable(std::uintptr_t address) noexcept {

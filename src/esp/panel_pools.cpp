@@ -28,8 +28,9 @@ struct VtableReport {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
   VtableReport report{};
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const std::uintptr_t kVtable{kSnapshot.items.at(index).vtable};
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
+    const std::uintptr_t kVtable{kEntity.vtable};
 
     bool placed{false};
     for (VtableTally& row : report.rows) {
@@ -81,8 +82,8 @@ void ShowPools(const math::Vec3& eye) {
   std::uintptr_t high{0};
   std::uint32_t nearby{0};
 
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
     if (low == 0 || kEntity.address < low) {
       low = kEntity.address;
     }

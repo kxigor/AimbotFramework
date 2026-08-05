@@ -105,7 +105,7 @@ void RunAssist() noexcept {
   const std::optional<float> kRest{AimAt(kState, kTarget->point, *kCamera)};
 
   HoldFire(kSettings.autoFire.load() && OwnWindowHasFocus() && kRest &&
-           *kRest <= HalfConeRadians(kSettings.autoFireCone.load()));
+           *kRest <= math::HalfAngle(kSettings.autoFireCone.load()));
 }
 
 }  // namespace afw::dll

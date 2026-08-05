@@ -21,18 +21,6 @@ namespace {
   return state;
 }
 
-[[nodiscard]] std::uintptr_t PlayerAddress(
-    const games::fc3::EntitySnapshot& snapshot) noexcept {
-  for (std::uint32_t index{0}; index < snapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{snapshot.items.at(index)};
-    if (kEntity.pawn && kEntity.pawn->agentType == games::fc3::kAgentPlayer) {
-      return kEntity.address;
-    }
-  }
-
-  return 0;
-}
-
 [[nodiscard]] std::optional<float> Ranked(bool wanted,
                                           float priority) noexcept {
   return wanted ? std::optional<float>{priority} : std::nullopt;
@@ -65,11 +53,31 @@ namespace {
   }
 }
 
-}  // namespace
+[[nodiscard]] aimbot::Choice ChoiceFromSettings() noexcept {
+  const config::Settings& kSettings{config::Current()};
 
-float HalfConeRadians(float degrees) noexcept {
-  return math::HalfAngle(degrees);
+  return aimbot::Choice{
+      .limits = {.maxDistance = kSettings.aimRange.load(),
+                 .maxError = math::HalfAngle(kSettings.aimConeDegrees.load())},
+      .weights = {.aim = kSettings.aimWeightAim.load(),
+                  .distance = kSettings.aimWeightDistance.load(),
+                  .priority = kSettings.aimWeightPriority.load(),
+                  .reach = kSettings.aimWeightReach.load()}};
 }
+
+[[nodiscard]] auto RankAgainst(const games::fc3::PawnInfo* self) noexcept {
+  return [self](const games::fc3::EntityInfo& entity) {
+    const std::optional<float> kPriority{PriorityOf(entity, self)};
+    if (!kPriority) {
+      return std::optional<aimbot::Ranking>{};
+    }
+
+    return std::optional<aimbot::Ranking>{aimbot::Ranking{
+        .priority = *kPriority, .reach = games::fc3::ReachOf(entity.address)}};
+  };
+}
+
+}  // namespace
 
 std::optional<float> PriorityOf(const games::fc3::EntityInfo& entity,
                                 const games::fc3::PawnInfo* self) noexcept {
@@ -83,28 +91,9 @@ std::optional<float> PriorityOf(const games::fc3::EntityInfo& entity,
 std::optional<aimbot::Target> Pick(
     const games::fc3::EntitySnapshot& snapshot,
     const games::fc3::CameraBasis& camera) noexcept {
-  const config::Settings& kSettings{config::Current()};
-  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(snapshot)};
-  const aimbot::Choice kChoice{
-      .limits = {.maxDistance = kSettings.aimRange.load(),
-                 .maxError = HalfConeRadians(kSettings.aimConeDegrees.load())},
-      .weights = {.aim = kSettings.aimWeightAim.load(),
-                  .distance = kSettings.aimWeightDistance.load(),
-                  .priority = kSettings.aimWeightPriority.load(),
-                  .reach = kSettings.aimWeightReach.load()}};
-
-  return aimbot::ChooseTarget(
-      snapshot, camera.position, camera.forward, kChoice,
-      [kSelf](const games::fc3::EntityInfo& entity) {
-        const std::optional<float> kPriority{PriorityOf(entity, kSelf)};
-        if (!kPriority) {
-          return std::optional<aimbot::Ranking>{};
-        }
-
-        return std::optional<aimbot::Ranking>{
-            aimbot::Ranking{.priority = *kPriority,
-                            .reach = games::fc3::ReachOf(entity.address)}};
-      });
+  return aimbot::ChooseTarget(snapshot, camera.position, camera.forward,
+                              ChoiceFromSettings(),
+                              RankAgainst(games::fc3::FindSelf(snapshot)));
 }
 
 std::uintptr_t CameraState(const games::fc3::EntitySnapshot& snapshot,
@@ -114,11 +103,12 @@ std::uintptr_t CameraState(const games::fc3::EntitySnapshot& snapshot,
     return CameraStateCache();
   }
 
-  const std::uintptr_t kPlayer{PlayerAddress(snapshot)};
-  if (kPlayer == 0) {
+  const games::fc3::EntityInfo* const kPlayer{games::fc3::SelfEntity(snapshot)};
+  if (kPlayer == nullptr) {
     return 0;
   }
-  CameraStateCache() = games::fc3::FindViewAngles(kPlayer, forward).value_or(0);
+  CameraStateCache() =
+      games::fc3::FindViewAngles(kPlayer->address, forward).value_or(0);
 
   return CameraStateCache();
 }
@@ -127,7 +117,8 @@ void UpdateReach() noexcept {
   static std::uint64_t frames{0};
   ++frames;
 
-  if (config::Current().aimWeightReach.load() <= 0.0F) {
+  const aimbot::Choice kChoice{ChoiceFromSettings()};
+  if (kChoice.weights.reach <= 0.0F) {
     return;
   }
 
@@ -138,25 +129,18 @@ void UpdateReach() noexcept {
   }
 
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
-  const float kRange{config::Current().aimRange.load()};
-  const float kCone{HalfConeRadians(config::Current().aimConeDegrees.load())};
+  const auto kRank{RankAgainst(games::fc3::FindSelf(kSnapshot))};
 
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    if (!PriorityOf(kEntity, kSelf)) {
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
+    const std::optional<aimbot::Target> kCandidate{aimbot::Considered(
+        kEntity, kCamera->position, kCamera->forward, kChoice.limits, kRank)};
+    if (!kCandidate) {
       continue;
     }
 
-    const math::Vec3 kPoint{aimbot::AimPoint(kEntity)};
-    const math::Vec3 kOffset{kPoint - kCamera->position};
-    if (kOffset.Length() > kRange ||
-        math::AngleBetween(kCamera->forward, kOffset) > kCone) {
-      continue;
-    }
-
-    games::fc3::ObserveReach(kEntity.address, kCamera->position, kPoint,
-                             frames);
+    games::fc3::ObserveReach(kCandidate->entity, kCamera->position,
+                             kCandidate->point, frames);
   }
 }
 

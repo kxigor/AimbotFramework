@@ -36,8 +36,8 @@ using NearbyRows = std::array<Nearby, kNearbyRows>;
   float best{kAimTolerance};
   float fallback{kAimTolerance};
 
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
     const math::Vec3 kDelta{kEntity.transform.Translation() - eye};
     const float kDistance{kDelta.Length()};
     if (kDistance < kMinAimDistance || kDistance > kDrawDistance) {
@@ -82,8 +82,8 @@ void ShowNearby(const math::Vec3& eye) {
   NearbyRows rows{};
   std::size_t used{0};
 
-  for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
-    const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
+  for (const games::fc3::EntityInfo& kEntity :
+       games::fc3::Entities(kSnapshot)) {
     const float kDistance{(kEntity.transform.Translation() - eye).Length()};
     if (kDistance <= kNearbyRange) {
       Insert(rows, used, Nearby{.entity = &kEntity, .distance = kDistance});

@@ -52,25 +52,17 @@ bool ReproducesTheView(std::uintptr_t state,
 
 std::optional<std::uintptr_t> FindViewAngles(
     std::uintptr_t playerEntity, const math::Vec3& forward) noexcept {
-  const std::optional<EngineArray> kParts{Components(playerEntity)};
-  if (!kParts) {
-    return std::nullopt;
-  }
+  return FirstComponent(
+      playerEntity,
+      [&forward](std::uintptr_t part) -> std::optional<std::uintptr_t> {
+        const std::optional<std::uintptr_t> kState{
+            Engine{part}.Pointer(kCameraState)};
+        if (!kState || !ReproducesTheView(*kState, forward)) {
+          return std::nullopt;
+        }
 
-  for (std::uint32_t index{0}; index < kParts->Size(); ++index) {
-    const std::optional<std::uintptr_t> kPart{kParts->Slot(index)};
-    if (!kPart) {
-      continue;
-    }
-
-    const std::optional<std::uintptr_t> kState{
-        Engine{*kPart}.Pointer(kCameraState)};
-    if (kState && ReproducesTheView(*kState, forward)) {
-      return kState;
-    }
-  }
-
-  return std::nullopt;
+        return kState;
+      });
 }
 
 bool WriteViewAngles(std::uintptr_t state,

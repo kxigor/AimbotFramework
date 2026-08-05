@@ -1,5 +1,6 @@
+#include <afw/games/fc3/internal/bones.hpp>
+#include <afw/games/fc3/internal/class_registry.hpp>
 #include <afw/games/fc3/internal/components.hpp>
-#include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>
@@ -11,13 +12,9 @@ namespace afw::games::fc3 {
 namespace {
 
 [[nodiscard]] bool CarriesAPose(std::uintptr_t component) noexcept {
-  const Engine kComponent{component};
-  const std::optional<std::uintptr_t> kBones{
-      kComponent.Pointer(kComponentBoneArray)};
-  const std::optional<std::uint32_t> kCount{
-      kComponent.CountAtMost(kComponentBoneCount, kMaxBones)};
+  const std::optional<BoneTable> kBones{BonesOf(component)};
 
-  return kBones && kCount && *kCount != 0;
+  return kBones && kBones->count != 0;
 }
 
 }  // namespace
@@ -29,25 +26,20 @@ std::optional<EngineArray> Components(std::uintptr_t entity) noexcept {
 
 std::optional<RigidComponent> FindRigidComponent(std::uintptr_t address,
                                                  bool posed) noexcept {
-  const std::optional<EngineArray> kParts{Components(address)};
-  if (!kParts) {
-    return std::nullopt;
-  }
+  return FirstComponent(
+      address, [posed](std::uintptr_t part) -> std::optional<RigidComponent> {
+        if (posed && !CarriesAPose(part)) {
+          return std::nullopt;
+        }
 
-  for (std::uint32_t index{0}; index < kParts->Size(); ++index) {
-    const std::optional<std::uintptr_t> kPart{kParts->Slot(index)};
-    if (!kPart || (posed && !CarriesAPose(*kPart))) {
-      continue;
-    }
+        const std::optional<math::Matrix4> kMatrix{
+            Engine{part}.Field<math::Matrix4>(kComponentWorldMatrix)};
+        if (!kMatrix || !kMatrix->IsRigid(kUnitTolerance, kAxisTolerance)) {
+          return std::nullopt;
+        }
 
-    const std::optional<math::Matrix4> kMatrix{
-        Engine{*kPart}.Field<math::Matrix4>(kComponentWorldMatrix)};
-    if (kMatrix && kMatrix->IsRigid(kUnitTolerance, kAxisTolerance)) {
-      return RigidComponent{.address = *kPart, .transform = *kMatrix};
-    }
-  }
-
-  return std::nullopt;
+        return RigidComponent{.address = part, .transform = *kMatrix};
+      });
 }
 
 std::optional<std::uintptr_t> OwnerOfComponent(

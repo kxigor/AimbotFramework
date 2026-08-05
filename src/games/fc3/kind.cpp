@@ -10,15 +10,23 @@ bool ArmiesHostile(const PawnInfo& self, const PawnInfo& other) noexcept {
          ((other.reverseHostileMask & self.ownArmyBit) != 0);
 }
 
-const PawnInfo* FindSelf(const EntitySnapshot& snapshot) noexcept {
-  for (std::uint32_t index{0}; index < snapshot.count; ++index) {
-    const EntityInfo& kEntity{snapshot.items.at(index)};
+const EntityInfo* SelfEntity(const EntitySnapshot& snapshot) noexcept {
+  for (const EntityInfo& kEntity : Entities(snapshot)) {
     if (kEntity.pawn && kEntity.pawn->agentType == kAgentPlayer) {
-      return &*kEntity.pawn;
+      return &kEntity;
     }
   }
 
   return nullptr;
+}
+
+const PawnInfo* FindSelf(const EntitySnapshot& snapshot) noexcept {
+  const EntityInfo* const kSelf{SelfEntity(snapshot)};
+  if (kSelf == nullptr || !kSelf->pawn) {
+    return nullptr;
+  }
+
+  return &*kSelf->pawn;
 }
 
 Kind KindOfPawn(const PawnInfo& pawn, const PawnInfo* self) noexcept {

@@ -36,6 +36,13 @@ enum class Kind : std::uint8_t {
 // The player, found by the agent type the engine assigns rather than by
 // proximity to the camera. Null when the snapshot holds no player, which
 // happens between the shot that killed you and the respawn.
+//
+// One walk, two answers: callers that steer the view want the entity so they
+// can reach its camera component, callers that decide sides want the pawn.
+// Asking the question twice is how one of the two comes to disagree.
+[[nodiscard]] const EntityInfo* SelfEntity(
+    const EntitySnapshot& snapshot) noexcept;
+
 [[nodiscard]] const PawnInfo* FindSelf(const EntitySnapshot& snapshot) noexcept;
 
 [[nodiscard]] Kind KindOfPawn(const PawnInfo& pawn,

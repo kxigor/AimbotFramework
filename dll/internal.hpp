@@ -8,8 +8,6 @@
 
 namespace afw::dll {
 
-[[nodiscard]] float HalfConeRadians(float degrees) noexcept;
-
 [[nodiscard]] std::optional<float> PriorityOf(
     const games::fc3::EntityInfo& entity,
     const games::fc3::PawnInfo* self) noexcept;

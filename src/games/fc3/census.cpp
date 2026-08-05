@@ -1,3 +1,7 @@
+#include <afw/games/fc3/internal/agent.hpp>
+#include <afw/games/fc3/internal/bones.hpp>
+#include <afw/games/fc3/internal/class_registry.hpp>
+#include <afw/games/fc3/internal/components.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>

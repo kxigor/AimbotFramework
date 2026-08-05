@@ -1,6 +1,6 @@
-#include <afw/games/fc3/internal/agent.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
+#include <afw/games/fc3/internal/pawn.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <cstdint>
 #include <optional>

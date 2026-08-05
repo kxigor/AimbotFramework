@@ -1,0 +1,16 @@
+# Sources are LF, in the repository and in the working tree. This machine has
+# core.autocrlf=true, which without this rule rewrites every checked-out file to
+# CRLF -- and check_format.py then fails the whole file with a diff that looks
+# like a total rewrite, because it reads the file keeping \r\n but takes
+# clang-format's stdout translated to \n. The repository already stores LF, so
+# this only pins what a fresh clone lands with.
+#
+# third_party/imgui is a submodule and carries its own attributes; nothing here
+# reaches into it.
+* text=auto eol=lf
+
+*.png binary
+*.dll binary
+*.exe binary
+*.a binary
+*.lib binary

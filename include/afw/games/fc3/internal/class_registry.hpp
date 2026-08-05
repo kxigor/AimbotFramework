@@ -39,6 +39,12 @@ class ClassProbe {
 
 [[nodiscard]] ClassProbe& EntityProbe() noexcept;
 
+// The update groups hold objects of several classes side by side, and reading
+// one class's offsets out of another yields nonsense that only looks like a
+// failed entity. This asks the engine's own type registry instead, through the
+// one virtual it takes to obtain a class descriptor.
+[[nodiscard]] bool IsEntityClass(std::uintptr_t address) noexcept;
+
 // Siblings in the registry, and the engine's own discriminator between them:
 // CastToCPawnAgent fails on an animal and CastToCAnimalAgentFC3 on a human.
 [[nodiscard]] ClassProbe& AgentProbe(AgentKind kind) noexcept;
