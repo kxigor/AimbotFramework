@@ -26,23 +26,25 @@ constexpr ImU32 kAheadColour{0xFF00FF00};
 constexpr ImU32 kRightColour{0xFF0080FF};
 
 struct Markers {
-  std::optional<ScreenPoint> ahead;
-  std::optional<ScreenPoint> probe;
+  std::optional<math::ScreenPoint> ahead;
+  std::optional<math::ScreenPoint> probe;
 };
 
-[[nodiscard]] Markers ProjectMarkers(const Matrix4& projection, const Vec3& eye,
-                                     const Vec3& forward, const Vec3& right,
+[[nodiscard]] Markers ProjectMarkers(const math::Matrix4& projection,
+                                     const math::Vec3& eye,
+                                     const math::Vec3& forward,
+                                     const math::Vec3& right,
                                      const ImVec2& display) noexcept {
   return Markers{
-      .ahead = WorldToScreen(projection, eye + (forward * kAheadDistance),
-                             display.x, display.y),
-      .probe = WorldToScreen(
+      .ahead = math::WorldToScreen(projection, eye + (forward * kAheadDistance),
+                                   display.x, display.y),
+      .probe = math::WorldToScreen(
           projection, eye + (forward * kProbeDistance) + (right * kProbeOffset),
           display.x, display.y)};
 }
 
-void ShowPanelBody(const Vec3& eye, const Vec3& forward, const ImVec2& display,
-                   const Markers& markers) {
+void ShowPanelBody(const math::Vec3& eye, const math::Vec3& forward,
+                   const ImVec2& display, const Markers& markers) {
   ShowMarkers(display, markers.ahead, markers.probe);
   ShowPools(eye);
   ShowEntities(eye, forward);
@@ -61,7 +63,7 @@ void ShowPanel(const games::fc3::CameraBasis& camera, const ImVec2& display,
   ShowChain(games::fc3::Diagnostics::Read(), display);
   ImGui::SeparatorText("camera");
   ShowCamera(camera, camera.right, kAspect,
-             VerticalFov(camera.fovHorizontalRadians, kAspect));
+             math::VerticalFov(camera.fovHorizontalRadians, kAspect));
   ShowPanelBody(camera.position, camera.forward, display, markers);
   ImGui::End();
 }
@@ -95,11 +97,12 @@ void DrawFrame() noexcept {
   }
 
   const float kAspect{kDisplay.x / kDisplay.y};
-  const float kVerticalFov{VerticalFov(kCamera->fovHorizontalRadians, kAspect)};
-  const Matrix4 kViewProjection{
-      Multiply(BuildView(kCamera->position, kCamera->forward, kCamera->upAxis,
-                         kCamera->right),
-               BuildProjection(kVerticalFov, kAspect, kNearPlane, kFarPlane))};
+  const float kVerticalFov{
+      math::VerticalFov(kCamera->fovHorizontalRadians, kAspect)};
+  const math::Matrix4 kViewProjection{Multiply(
+      math::BuildView(kCamera->position, kCamera->forward, kCamera->upAxis,
+                      kCamera->right),
+      math::BuildProjection(kVerticalFov, kAspect, kNearPlane, kFarPlane))};
   const Markers kMarkers{ProjectMarkers(kViewProjection, kCamera->position,
                                         kCamera->forward, kCamera->right,
                                         kDisplay)};

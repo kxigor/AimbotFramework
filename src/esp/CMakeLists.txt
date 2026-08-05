@@ -7,9 +7,10 @@
 # so it is added from src/ only under WIN32.
 
 add_library(afw_esp STATIC
-  projection.cpp
   classify.cpp
-  draw.cpp
+  settings.cpp
+  draw_entities.cpp
+  draw_overlay.cpp
   panel_world.cpp
   panel_entities.cpp
   panel_pools.cpp

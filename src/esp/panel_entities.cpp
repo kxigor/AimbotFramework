@@ -26,8 +26,8 @@ struct Nearby {
 
 using NearbyRows = std::array<Nearby, kNearbyRows>;
 
-[[nodiscard]] Nearby UnderCrosshair(const Vec3& eye,
-                                    const Vec3& forward) noexcept {
+[[nodiscard]] Nearby UnderCrosshair(const math::Vec3& eye,
+                                    const math::Vec3& forward) noexcept {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
   Nearby hit{};
@@ -37,7 +37,7 @@ using NearbyRows = std::array<Nearby, kNearbyRows>;
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
-    const Vec3 kDelta{kEntity.transform.Translation() - eye};
+    const math::Vec3 kDelta{kEntity.transform.Translation() - eye};
     const float kDistance{kDelta.Length()};
     if (kDistance < kMinAimDistance || kDistance > kDrawDistance) {
       continue;
@@ -75,7 +75,7 @@ void Insert(NearbyRows& rows, std::size_t& used, const Nearby& row) noexcept {
   rows.at(slot) = row;
 }
 
-void ShowNearby(const Vec3& eye) {
+void ShowNearby(const math::Vec3& eye) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
   const games::fc3::PawnInfo* const kSelf{FindSelf(kSnapshot)};
   NearbyRows rows{};
@@ -101,7 +101,7 @@ void ShowNearby(const Vec3& eye) {
   }
 }
 
-void ShowInspector(const Vec3& eye, const Vec3& forward) {
+void ShowInspector(const math::Vec3& eye, const math::Vec3& forward) {
   const Nearby kHit{UnderCrosshair(eye, forward)};
   const games::fc3::EntityInfo* const kNearest{kHit.entity};
 
@@ -133,7 +133,7 @@ void ShowInspector(const Vec3& eye, const Vec3& forward) {
 
 }  // namespace
 
-void ShowEntities(const Vec3& eye, const Vec3& forward) {
+void ShowEntities(const math::Vec3& eye, const math::Vec3& forward) {
   ShowInspector(eye, forward);
   ShowNearby(eye);
 }

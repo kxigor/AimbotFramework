@@ -24,7 +24,6 @@ constexpr DWORD kWriteFlag{1};
 void LogOrigin(const void* address) {
   std::array<WCHAR, MAX_PATH> path{};
   HMODULE module{nullptr};
-  std::array<char, kMessageChars> message{};
 
   if (GetModuleHandleExW(
           /*dwFlags      = */ GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
@@ -35,19 +34,15 @@ void LogOrigin(const void* address) {
           /*hModule    = */ module,
           /*lpFilename = */ path.data(),
           /*nSize      = */ static_cast<DWORD>(MAX_PATH)) == 0) {
-    std::snprintf(message.data(), message.size(),
-                  "[aimbot] fault in no known module\n");
-    Log(message.data());
+    Log("[aimbot] fault in no known module\n");
     return;
   }
 
   const std::uintptr_t kBase{core::PointerCast<std::uintptr_t>(module)};
   const std::uintptr_t kOffset{core::PointerCast<std::uintptr_t>(address) -
                                kBase};
-  std::snprintf(message.data(), message.size(),
-                "[aimbot] fault in %ls + %llX\n", path.data(),
-                static_cast<std::uint64_t>(kOffset));
-  Log(message.data());
+  Logf("[aimbot] fault in %ls + %llX\n", path.data(),
+       static_cast<std::uint64_t>(kOffset));
 }
 
 void LogAccess(const EXCEPTION_RECORD& record) {
@@ -56,25 +51,18 @@ void LogAccess(const EXCEPTION_RECORD& record) {
     return;
   }
 
-  std::array<char, kMessageChars> message{};
-  std::snprintf(
-      message.data(), message.size(), "[aimbot] %s at %llX\n",
-      record.ExceptionInformation[0] == kWriteFlag ? "writing" : "reading",
-      static_cast<std::uint64_t>(record.ExceptionInformation[1]));
-  Log(message.data());
+  Logf("[aimbot] %s at %llX\n",
+       record.ExceptionInformation[0] == kWriteFlag ? "writing" : "reading",
+       static_cast<std::uint64_t>(record.ExceptionInformation[1]));
 }
 
 LONG WINAPI OnFault(EXCEPTION_POINTERS* pointers) {
   if (pointers != nullptr && pointers->ExceptionRecord != nullptr) {
     const EXCEPTION_RECORD& kRecord{*pointers->ExceptionRecord};
 
-    std::array<char, kMessageChars> message{};
-    std::snprintf(
-        message.data(), message.size(),
-        "[aimbot] unhandled exception %lX at %llX\n", kRecord.ExceptionCode,
-        static_cast<std::uint64_t>(
-            core::PointerCast<std::uintptr_t>(kRecord.ExceptionAddress)));
-    Log(message.data());
+    Logf("[aimbot] unhandled exception %lX at %llX\n", kRecord.ExceptionCode,
+         static_cast<std::uint64_t>(
+             core::PointerCast<std::uintptr_t>(kRecord.ExceptionAddress)));
 
     LogOrigin(kRecord.ExceptionAddress);
     LogAccess(kRecord);

@@ -74,7 +74,7 @@ void ShowVtables() {
   }
 }
 
-void ShowPools(const Vec3& eye) {
+void ShowPools(const math::Vec3& eye) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
 
   std::uintptr_t low{0};

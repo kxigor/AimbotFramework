@@ -18,6 +18,11 @@ constexpr std::uint32_t kMaxAncestors{32};
 // vehicle, and a handful on the weapon parts riding on the player.
 constexpr std::uint32_t kMaxBones{512};
 
+// A query that found this many is a query that went wrong, not a bullet that
+// hit a crowd.
+constexpr std::uint32_t kMaxHits{64};
+constexpr std::uint32_t kMaxQueryRecords{1024};
+
 // A head belongs to the body it was read from. The matrix the bone is placed by
 // comes from a component chosen by its contents, and a stale one already put an
 // entity 118 m from itself once, so a head further than this from its own

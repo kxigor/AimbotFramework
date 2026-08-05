@@ -4,6 +4,7 @@
 #include <afw/app/module.hpp>
 #include <afw/win/scoped_handle.hpp>
 #include <array>
+#include <cstdarg>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
@@ -59,17 +60,22 @@ void Log(const char* text) {
       /*lpOverlapped           = */ nullptr);
 }
 
-void LogFailure(const char* step, const std::error_code& error) {
+void Logf(const char* format, ...) {
   std::array<char, kMessageChars> message{};
-  std::snprintf(message.data(), message.size(), "[aimbot] %s failed: %s\n",
-                step, error.message().c_str());
+
+  // NOLINTNEXTLINE(cppcoreguidelines-init-variables)
+  va_list arguments;
+  va_start(arguments, format);
+  std::vsnprintf(message.data(), message.size(), format, arguments);
+  va_end(arguments);
+
   Log(message.data());
 }
 
-void LogInstalled(const char* what) {
-  std::array<char, kMessageChars> message{};
-  std::snprintf(message.data(), message.size(), "[aimbot] hooked %s\n", what);
-  Log(message.data());
+void LogFailure(const char* step, const std::error_code& error) {
+  Logf("[aimbot] %s failed: %s\n", step, error.message().c_str());
 }
+
+void LogInstalled(const char* what) { Logf("[aimbot] hooked %s\n", what); }
 
 }  // namespace afw::app

@@ -11,6 +11,10 @@ endif()
 add_library(aimbot SHARED
   dllmain.cpp
   farcry3.cpp
+  target.cpp
+  assist.cpp
+  steady.cpp
+  probe.cpp
 )
 
 set_target_properties(aimbot PROPERTIES

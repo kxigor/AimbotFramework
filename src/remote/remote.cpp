@@ -16,16 +16,12 @@
 
 namespace afw::remote {
 
-using afw::win::LastError;
-using afw::win::RemoteMemory;
-using afw::win::ScopedHandle;
-
 std::expected<DWORD, std::error_code> FindProcessByImageName(PCWSTR imageName) {
-  const ScopedHandle kSnapshot{CreateToolhelp32Snapshot(
+  const win::ScopedHandle kSnapshot{CreateToolhelp32Snapshot(
       /*dwFlags       = */ TH32CS_SNAPPROCESS,
       /*th32ProcessID = */ 0)};
   if (!kSnapshot) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   PROCESSENTRY32W entry{.dwSize = sizeof(PROCESSENTRY32W)};
@@ -34,7 +30,7 @@ std::expected<DWORD, std::error_code> FindProcessByImageName(PCWSTR imageName) {
       /*hSnapshot = */ kSnapshot.Get(),
       /*lppe      = */ &entry)};
   if (hasEntry == FALSE) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   while (hasEntry != FALSE) {
@@ -49,8 +45,8 @@ std::expected<DWORD, std::error_code> FindProcessByImageName(PCWSTR imageName) {
   return std::unexpected{std::make_error_code(std::errc::no_such_process)};
 }
 
-std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
-                                                      PCWSTR text) {
+std::expected<win::RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
+                                                           PCWSTR text) {
   const SIZE_T kByteSize{(wcslen(text) + 1) * sizeof(WCHAR)};
 
   LPVOID remoteText{VirtualAllocEx(
@@ -60,10 +56,10 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
       /*flAllocationType = */ MEM_COMMIT,
       /*flProtect        = */ PAGE_READWRITE)};
   if (remoteText == nullptr) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
-  RemoteMemory remoteMem{proc, remoteText};
+  win::RemoteMemory remoteMem{proc, remoteText};
 
   const BOOL kWriteStatus{WriteProcessMemory(
       /*hProcess               = */ proc,
@@ -72,7 +68,7 @@ std::expected<RemoteMemory, std::error_code> StrDupEx(HANDLE proc,
       /*nSize                  = */ kByteSize,
       /*lpNumberOfBytesWritten = */ nullptr)};
   if (kWriteStatus == FALSE) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   return remoteMem;
@@ -85,14 +81,14 @@ LocalLoadLibraryRoutine() {
   HMODULE kernel32{GetModuleHandleW(
       /*lpModuleName = */ L"kernel32.dll")};
   if (kernel32 == nullptr) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   FARPROC loadLibrary{GetProcAddress(
       /*hModule    = */ kernel32,
       /*lpProcName = */ "LoadLibraryW")};
   if (loadLibrary == nullptr) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
 #pragma GCC diagnostic push
@@ -103,9 +99,9 @@ LocalLoadLibraryRoutine() {
 }
 
 [[nodiscard]] std::expected<DWORD, std::error_code> RunRemoteRoutine(
-    HANDLE proc, LPTHREAD_START_ROUTINE routine, RemoteMemory& argument,
+    HANDLE proc, LPTHREAD_START_ROUTINE routine, win::RemoteMemory& argument,
     DWORD timeoutMs) {
-  const ScopedHandle kThread{CreateRemoteThread(
+  const win::ScopedHandle kThread{CreateRemoteThread(
       /*hProcess           = */ proc,
       /*lpThreadAttributes = */ nullptr,
       /*dwStackSize        = */ 0,
@@ -114,7 +110,7 @@ LocalLoadLibraryRoutine() {
       /*dwCreationFlags    = */ 0,
       /*lpThreadId         = */ nullptr)};
   if (!kThread) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   const DWORD kWaitResult{WaitForSingleObject(
@@ -125,14 +121,14 @@ LocalLoadLibraryRoutine() {
     if (kWaitResult == WAIT_TIMEOUT) {
       return std::unexpected{make_error_code(Error::RemoteThreadTimeout)};
     }
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   DWORD exitCode{};
   if (GetExitCodeThread(
           /*hThread    = */ kThread.Get(),
           /*lpExitCode = */ &exitCode) == FALSE) {
-    return std::unexpected{LastError()};
+    return std::unexpected{win::LastError()};
   }
 
   return exitCode;
@@ -142,7 +138,7 @@ LocalLoadLibraryRoutine() {
 
 std::expected<void, std::error_code> InjectLibrary(HANDLE proc, PCWSTR dllPath,
                                                    DWORD timeoutMs) {
-  std::expected<RemoteMemory, std::error_code> remotePath{
+  std::expected<win::RemoteMemory, std::error_code> remotePath{
       StrDupEx(proc, dllPath)};
   if (!remotePath) {
     return std::unexpected{remotePath.error()};

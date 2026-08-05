@@ -113,14 +113,4 @@ Diagnostics Diagnostics::Read() noexcept {
   return report;
 }
 
-std::expected<Viewport, std::error_code> ReadViewport() noexcept {
-  const Diagnostics kReport{Diagnostics::Read()};
-  if (kReport.viewportWidth <= 0 || kReport.viewportHeight <= 0) {
-    return std::unexpected{make_error_code(Error::ViewportNotSane)};
-  }
-
-  return Viewport{.width = static_cast<float>(kReport.viewportWidth),
-                  .height = static_cast<float>(kReport.viewportHeight)};
-}
-
 }  // namespace afw::games::fc3

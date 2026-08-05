@@ -65,18 +65,19 @@ void ShowAddress(const char* label, std::uintptr_t value) {
   ImGui::Text("%-18s %llX", label, static_cast<std::uint64_t>(value));
 }
 
-void ShowAxis(const char* label, const Vec3& axis) {
+void ShowAxis(const char* label, const math::Vec3& axis) {
   ImGui::Text("%-18s %8.3f %8.3f %8.3f  |%.3f|", label,
               static_cast<double>(axis.x), static_cast<double>(axis.y),
               static_cast<double>(axis.z), static_cast<double>(axis.Length()));
 }
 
-void ShowVector(const char* label, const Vec3& value) {
+void ShowVector(const char* label, const math::Vec3& value) {
   ImGui::Text("%-14s %9.3f %9.3f %9.3f", label, static_cast<double>(value.x),
               static_cast<double>(value.y), static_cast<double>(value.z));
 }
 
-void ShowPoint(const char* label, const std::optional<ScreenPoint>& point) {
+void ShowPoint(const char* label,
+               const std::optional<math::ScreenPoint>& point) {
   if (!point) {
     ImGui::Text("%-18s behind the camera", label);
     return;
@@ -116,7 +117,7 @@ void ShowChain(const games::fc3::Diagnostics& report, const ImVec2& display) {
   ShowCensus();
 }
 
-void ShowCamera(const games::fc3::CameraBasis& camera, const Vec3& right,
+void ShowCamera(const games::fc3::CameraBasis& camera, const math::Vec3& right,
                 float aspect, float verticalFov) {
   ShowAxis("position", camera.position);
   ShowAxis("forward", camera.forward);
@@ -128,8 +129,9 @@ void ShowCamera(const games::fc3::CameraBasis& camera, const Vec3& right,
   ImGui::Text("%-18s %.4f", "aspect", static_cast<double>(aspect));
 }
 
-void ShowMarkers(const ImVec2& display, const std::optional<ScreenPoint>& ahead,
-                 const std::optional<ScreenPoint>& probe) {
+void ShowMarkers(const ImVec2& display,
+                 const std::optional<math::ScreenPoint>& ahead,
+                 const std::optional<math::ScreenPoint>& probe) {
   ImGui::SeparatorText("markers");
   ImGui::Text("%-18s %8.1f %8.1f", "screen centre",
               static_cast<double>(display.x) * kHalf,

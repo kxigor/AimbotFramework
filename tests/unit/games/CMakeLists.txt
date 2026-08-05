@@ -1,6 +1,9 @@
 add_gtest(games_unit
   SOURCES
-    fc3_unit.cpp
+    census_unit.cpp
+    snapshot_unit.cpp
+    handoff_unit.cpp
+    bones_unit.cpp
     classify_unit.cpp
     error_unit.cpp
   LIBRARIES afw::games::fc3 project_options project_sanitizers project_coverage

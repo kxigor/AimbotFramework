@@ -13,16 +13,12 @@ namespace afw::games::fc3 {
 // The engine stores points, axes and boxes as runs of consecutive floats, which
 // is what these types already are, so they are read straight out of its memory
 // with no intermediate representation.
-using math::Aabb;
-using math::Matrix4;
-using math::Vec3;
-using math::ViewAngles;
 
 struct CameraBasis {
-  Vec3 position{};
-  Vec3 forward{};
-  Vec3 upAxis{};
-  Vec3 right{};
+  math::Vec3 position{};
+  math::Vec3 forward{};
+  math::Vec3 upAxis{};
+  math::Vec3 right{};
   float fovRadians{};
   float fovHorizontalRadians{};
 };
@@ -75,6 +71,8 @@ constexpr std::int32_t kFactionPrivateer{3};
 // fails on a human.
 enum class AgentKind : std::uint8_t { Pawn, Animal, SimpleAnimal, Vehicle };
 
+constexpr std::size_t kAgentKindCount{4};
+
 struct PawnInfo {
   AgentKind kind{AgentKind::Pawn};
   std::int32_t army{kNoArmy};
@@ -91,17 +89,17 @@ struct EntityInfo {
   std::uintptr_t vtable{};
   // Rows 0..2 are the object's axes in world space, row 3 its position. The box
   // is in that same object space.
-  Matrix4 transform{};
-  Aabb box{};
+  math::Matrix4 transform{};
+  math::Aabb box{};
   std::optional<PawnInfo> pawn;
   // Where the skeleton's "Head" bone stands this frame, in world space. Only
   // read for entities the engine drives with a pawn agent, and absent when that
   // skeleton has no such bone.
-  std::optional<Vec3> head;
+  std::optional<math::Vec3> head;
   // The "Spine" bone, in the same space and read under the same conditions. It
   // is what an animal is aimed at: nothing else on one is both reliably present
   // and reliably inside the body.
-  std::optional<Vec3> body;
+  std::optional<math::Vec3> body;
   bool humanoid{};
 };
 

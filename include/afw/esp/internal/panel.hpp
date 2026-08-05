@@ -16,28 +16,30 @@ namespace afw::esp {
 
 void ShowAddress(const char* label, std::uintptr_t value);
 
-void ShowAxis(const char* label, const Vec3& axis);
+void ShowAxis(const char* label, const math::Vec3& axis);
 
-void ShowVector(const char* label, const Vec3& value);
+void ShowVector(const char* label, const math::Vec3& value);
 
-void ShowPoint(const char* label, const std::optional<ScreenPoint>& point);
+void ShowPoint(const char* label,
+               const std::optional<math::ScreenPoint>& point);
 
 void ShowChain(const games::fc3::Diagnostics& report, const ImVec2& display);
 
-void ShowCamera(const games::fc3::CameraBasis& camera, const Vec3& right,
+void ShowCamera(const games::fc3::CameraBasis& camera, const math::Vec3& right,
                 float aspect, float verticalFov);
 
-void ShowMarkers(const ImVec2& display, const std::optional<ScreenPoint>& ahead,
-                 const std::optional<ScreenPoint>& probe);
+void ShowMarkers(const ImVec2& display,
+                 const std::optional<math::ScreenPoint>& ahead,
+                 const std::optional<math::ScreenPoint>& probe);
 
 // What is under the crosshair and what stands nearby, with every pawn field
 // spelled out.
-void ShowEntities(const Vec3& eye, const Vec3& forward);
+void ShowEntities(const math::Vec3& eye, const math::Vec3& forward);
 
 // Where the entities live and which classes they are, for when the census
 // itself looks wrong.
 void ShowVtables();
 
-void ShowPools(const Vec3& eye);
+void ShowPools(const math::Vec3& eye);
 
 }  // namespace afw::esp

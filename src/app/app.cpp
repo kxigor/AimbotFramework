@@ -125,18 +125,12 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
 }
 
 void LogAttached(const Game& game) {
-  std::array<char, kMessageChars> message{};
-  std::snprintf(message.data(), message.size(), "[aimbot] attached to %s\n",
-                game.Name());
-  Log(message.data());
+  Logf("[aimbot] attached to %s\n", game.Name());
 }
 
 void LogTable(const hook::Vtable& table) {
-  std::array<char, kMessageChars> message{};
-  std::snprintf(
-      message.data(), message.size(), "[aimbot] vtable at %p, Present at %p\n",
-      static_cast<const void*>(table.Get()), table.At(render::kPresentSlot));
-  Log(message.data());
+  Logf("[aimbot] vtable at %p, Present at %p\n",
+       static_cast<const void*>(table.Get()), table.At(render::kPresentSlot));
 }
 
 void RunUntilUnload() {

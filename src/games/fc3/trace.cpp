@@ -1,56 +1,58 @@
 #include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
+#include <afw/games/fc3/internal/limits.hpp>
+#include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
-#include <afw/process/memory.hpp>
 #include <array>
 #include <bit>
 #include <cstdint>
-#include <expected>
 #include <optional>
-#include <system_error>
 
 namespace afw::games::fc3 {
 
 namespace {
 
 [[nodiscard]] std::optional<std::uintptr_t> QueryCore() noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kWorld{
-      process::ReadPointerAs<EnginePtr>(Resolve(kCollisionQueryWorld))};
-  if (!kWorld || *kWorld == 0) {
+  const std::optional<std::uintptr_t> kWorld{
+      Engine{Resolve(kCollisionQueryWorld)}.Pointer(0)};
+  if (!kWorld) {
     return std::nullopt;
   }
 
-  const std::expected<std::uintptr_t, std::error_code> kCore{
-      process::ReadPointerAs<EnginePtr>(*kWorld + kQueryCore)};
-  if (!kCore || *kCore == 0) {
-    return std::nullopt;
-  }
-
-  return *kCore;
+  return Engine{*kWorld}.Pointer(kQueryCore);
 }
 
 [[nodiscard]] std::optional<std::uintptr_t> FindRecord(std::uintptr_t core,
                                                        std::uintptr_t table,
                                                        std::uintptr_t counter,
                                                        int query) noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kBase{
-      process::ReadPointerAs<EnginePtr>(core + table)};
-  const std::expected<std::uint32_t, std::error_code> kCount{
-      process::ReadAt<std::uint32_t>(core + counter)};
-  if (!kBase || !kCount || *kBase == 0 || *kCount > kMaxQueryRecords) {
+  const Engine kCore{core};
+  const std::optional<std::uintptr_t> kBase{kCore.Pointer(table)};
+  const std::optional<std::uint32_t> kCount{
+      kCore.CountAtMost(counter, kMaxQueryRecords)};
+  if (!kBase || !kCount) {
     return std::nullopt;
   }
 
   for (std::uint32_t index{0}; index < *kCount; ++index) {
     const std::uintptr_t kRecord{*kBase + (index * kQueryRecordStride)};
-    const std::expected<std::int32_t, std::error_code> kFiled{
-        process::ReadAt<std::int32_t>(kRecord)};
+    const std::optional<std::int32_t> kFiled{
+        Engine{kRecord}.Field<std::int32_t>(0)};
     if (kFiled && *kFiled == query) {
       return kRecord + kQueryRecordHits;
     }
   }
 
   return std::nullopt;
+}
+
+[[nodiscard]] std::optional<TraceHit> ReadHit(std::uintptr_t hit) noexcept {
+  const std::optional<math::Vec3> kPoint{Engine{hit}.Field<math::Vec3>(0)};
+  if (!kPoint || !kPoint->IsFinite()) {
+    return std::nullopt;
+  }
+
+  return TraceHit{.point = *kPoint};
 }
 
 }  // namespace
@@ -78,14 +80,15 @@ struct Filter {
 
 }  // namespace
 
-std::optional<int> TraceSegment(const Vec3& from, const Vec3& target) noexcept {
+std::optional<int> TraceSegment(const math::Vec3& from,
+                                const math::Vec3& target) noexcept {
   if (!from.IsFinite() || !target.IsFinite()) {
     return std::nullopt;
   }
 
-  const std::expected<std::uintptr_t, std::error_code> kWorld{
-      process::ReadPointerAs<EnginePtr>(Resolve(kCollisionQueryWorld))};
-  if (!kWorld || *kWorld == 0) {
+  const std::optional<std::uintptr_t> kWorld{
+      Engine{Resolve(kCollisionQueryWorld)}.Pointer(0)};
+  if (!kWorld) {
     return std::nullopt;
   }
 
@@ -105,25 +108,12 @@ std::optional<int> TraceSegment(const Vec3& from, const Vec3& target) noexcept {
 
 #else
 
-std::optional<int> TraceSegment(const Vec3& /*from*/,
-                                const Vec3& /*target*/) noexcept {
+std::optional<int> TraceSegment(const math::Vec3& /*from*/,
+                                const math::Vec3& /*target*/) noexcept {
   return std::nullopt;
 }
 
 #endif
-
-namespace {
-
-[[nodiscard]] std::optional<TraceHit> ReadHit(std::uintptr_t hit) noexcept {
-  const std::expected<Vec3, std::error_code> kPoint{process::ReadAt<Vec3>(hit)};
-  if (!kPoint || !kPoint->IsFinite()) {
-    return std::nullopt;
-  }
-
-  return TraceHit{.point = *kPoint};
-}
-
-}  // namespace
 
 std::optional<TraceAnswer> TraceLook(int query) noexcept {
   const std::optional<std::uintptr_t> kCore{QueryCore()};
@@ -140,11 +130,11 @@ std::optional<TraceAnswer> TraceLook(int query) noexcept {
     return std::nullopt;
   }
 
-  const std::expected<std::uintptr_t, std::error_code> kBase{
-      process::ReadPointerAs<EnginePtr>(*record)};
-  const std::expected<std::uint32_t, std::error_code> kCount{
-      process::ReadAt<std::uint32_t>(*record + sizeof(EnginePtr))};
-  if (!kBase || !kCount || *kCount > kMaxHits) {
+  const Engine kHits{*record};
+  const std::optional<EnginePtr> kBase{kHits.Field<EnginePtr>(0)};
+  const std::optional<std::uint32_t> kCount{
+      kHits.CountAtMost(sizeof(EnginePtr), kMaxHits)};
+  if (!kBase || !kCount) {
     return std::nullopt;
   }
   if (*kCount == 0 || *kBase == 0) {
@@ -157,86 +147,6 @@ std::optional<TraceAnswer> TraceLook(int query) noexcept {
   }
 
   return TraceAnswer{.hits = *kCount, .first = *kFirst};
-}
-
-namespace {
-
-constexpr std::size_t kReachRows{64};
-constexpr std::uint64_t kReachInterval{15};
-constexpr std::uint64_t kReachGiveUp{45};
-constexpr float kReachSlack{1.5F};
-
-struct Reach {
-  std::uintptr_t entity{};
-  std::optional<int> pending;
-  float span{};
-  float value{1.0F};
-  std::uint64_t asked{};
-};
-
-[[nodiscard]] std::array<Reach, kReachRows>& Reaches() noexcept {
-  static std::array<Reach, kReachRows> rows{};
-
-  return rows;
-}
-
-[[nodiscard]] Reach& RowFor(std::uintptr_t entity) noexcept {
-  Reach* oldest{&Reaches().front()};
-  for (Reach& row : Reaches()) {
-    if (row.entity == entity) {
-      return row;
-    }
-    if (row.asked < oldest->asked) {
-      oldest = &row;
-    }
-  }
-
-  *oldest = Reach{.entity = entity};
-
-  return *oldest;
-}
-
-[[nodiscard]] bool Reached(const TraceAnswer& answer, const Vec3& eye,
-                           float span) noexcept {
-  if (answer.hits == 0) {
-    return true;
-  }
-
-  return (answer.first.point - eye).Length() + kReachSlack >= span;
-}
-
-}  // namespace
-
-float ReachOf(std::uintptr_t entity) noexcept {
-  for (const Reach& kRow : Reaches()) {
-    if (kRow.entity == entity) {
-      return kRow.value;
-    }
-  }
-
-  return 1.0F;
-}
-
-void ObserveReach(std::uintptr_t entity, const Vec3& eye, const Vec3& point,
-                  std::uint64_t frame) noexcept {
-  Reach& row{RowFor(entity)};
-  if (row.pending) {
-    const std::optional<TraceAnswer> kAnswer{TraceLook(*row.pending)};
-    if (kAnswer) {
-      row.value = Reached(*kAnswer, eye, row.span) ? 1.0F : 0.0F;
-      row.pending.reset();
-    } else if (frame - row.asked > kReachGiveUp) {
-      row.pending.reset();
-    }
-    return;
-  }
-  if (frame - row.asked < kReachInterval) {
-    return;
-  }
-
-  row.span = (point - eye).Length();
-  row.asked = frame;
-  row.pending = TraceSegment(eye, point);
 }
 
 }  // namespace afw::games::fc3

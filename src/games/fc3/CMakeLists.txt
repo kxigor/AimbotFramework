@@ -8,11 +8,18 @@
 add_library(afw_games_fc3 STATIC
   module.cpp
   camera.cpp
+  class_registry.cpp
+  components.cpp
   entity.cpp
+  agent.cpp
+  pawn.cpp
+  bones.cpp
   census.cpp
+  snapshot.cpp
   error.cpp
   weapon.cpp
   trace.cpp
+  reach.cpp
 )
 add_library(afw::games::fc3 ALIAS afw_games_fc3)
 
