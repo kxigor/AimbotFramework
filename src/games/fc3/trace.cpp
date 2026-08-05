@@ -1,8 +1,9 @@
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
+#include <afw/games/fc3/module.hpp>
+#include <afw/games/fc3/trace.hpp>
 #include <array>
 #include <bit>
 #include <cstdint>

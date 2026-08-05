@@ -19,9 +19,6 @@ namespace {
 
 constexpr int kAimKey{VK_XBUTTON1};
 
-// The trigger is held rather than clicked, and a held mouse button is not what
-// the engine's fire logic wants: it wants an edge. Four frames down out of five
-// gives it one at a rate no hand produces.
 constexpr std::uint64_t kFireCycle{5};
 constexpr std::uint64_t kFireDown{4};
 
@@ -59,8 +56,6 @@ void HoldFire(bool wanted) noexcept {
   }
 }
 
-// Answers how far off the aim still is after this frame's step, so the caller
-// can decide whether a shot would land rather than guessing from the setting.
 [[nodiscard]] std::optional<float> AimAt(
     std::uintptr_t state, const math::Vec3& point,
     const games::fc3::CameraBasis& camera) noexcept {

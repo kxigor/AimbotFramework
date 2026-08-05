@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <cstdint>
 #include <optional>

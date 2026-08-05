@@ -19,8 +19,6 @@ std::string Describe(Error error) {
       return "the camera was found but its basis fails the sanity check: "
              "the forward vector is not unit length, or the field of view "
              "is out of range";
-    case Error::ViewportNotSane:
-      return "the viewport reports a width or height that is not positive";
     default:
       return "unknown afw::games::fc3 error";
   }

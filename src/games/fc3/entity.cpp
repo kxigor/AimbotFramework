@@ -12,8 +12,6 @@ namespace afw::games::fc3 {
 
 namespace {
 
-// Template and system entities all sit at one coordinate with an identity
-// transform, so they pass every other test a real entity passes.
 [[nodiscard]] bool IsTemplateSpawn(const math::Vec3& position) noexcept {
   return std::fabs(position.x - kTemplateCoordinate) <= kTemplateTolerance &&
          std::fabs(position.y - kTemplateCoordinate) <= kTemplateTolerance;
@@ -26,9 +24,6 @@ namespace {
          std::fabs(box.max.y) < kHumanoidMaxWidth;
 }
 
-// The entity's own copy is authoritative only for something with no physics
-// component, and it agreed with the truth in all 33 characters measured -- so
-// the component is the fallback and not the first choice.
 [[nodiscard]] std::optional<math::Matrix4> ReadWorldMatrix(
     std::uintptr_t address) noexcept {
   const std::optional<math::Matrix4> kOwn{

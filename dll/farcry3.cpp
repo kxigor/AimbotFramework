@@ -20,13 +20,10 @@ namespace {
 
 constexpr std::uint64_t kStatusInterval{1800};
 
-// The engine's own entity update. Everything that reads the world rides here
-// rather than on the presented frame: this is where the world is being walked,
-// and the frame callback runs on the render thread with no such guarantee.
 void AFW_ENGINE_CALL RunAllGroupDetour(void* scheduler) {
   const app::DetourGuard kInside{};
 
-  if (config::Current().espEnabled) {
+  if (config::Current().espEnabled.load()) {
     games::fc3::TakeCensus(std::bit_cast<std::uintptr_t>(scheduler));
   }
   ProbeTrace();

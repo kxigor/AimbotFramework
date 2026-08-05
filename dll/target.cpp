@@ -1,8 +1,7 @@
 #include <afw/aimbot/aimbot.hpp>
 #include <afw/config/config.hpp>
-#include <afw/esp/internal/classify.hpp>
-#include <afw/esp/internal/settings.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/kind.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/math/direction.hpp>
 #include <afw/math/vec3.hpp>
@@ -34,10 +33,42 @@ namespace {
   return 0;
 }
 
+[[nodiscard]] std::optional<float> Ranked(bool wanted,
+                                          float priority) noexcept {
+  return wanted ? std::optional<float>{priority} : std::nullopt;
+}
+
+[[nodiscard]] std::optional<float> WantedKind(games::fc3::Kind kind) noexcept {
+  using games::fc3::Kind;
+
+  const config::Settings& kSettings{config::Current()};
+  switch (kind) {
+    case Kind::Enemy:
+      return Ranked(kSettings.aimEnemies.load(),
+                    kSettings.aimPriorityEnemies.load());
+    case Kind::Predator:
+    case Kind::Animal:
+      return Ranked(kSettings.aimAnimals.load(),
+                    kSettings.aimPriorityAnimals.load());
+    case Kind::Bird:
+      return Ranked(kSettings.aimBirds.load(),
+                    kSettings.aimPriorityBirds.load());
+    case Kind::Vehicle:
+      return Ranked(kSettings.aimVehicles.load(),
+                    kSettings.aimPriorityVehicles.load());
+    case Kind::Self:
+    case Kind::Ally:
+    case Kind::Civilian:
+    case Kind::Prop:
+    default:
+      return std::nullopt;
+  }
+}
+
 }  // namespace
 
 float HalfConeRadians(float degrees) noexcept {
-  return math::Radians(degrees * math::kHalf);
+  return math::HalfAngle(degrees);
 }
 
 std::optional<float> PriorityOf(const games::fc3::EntityInfo& entity,
@@ -46,14 +77,14 @@ std::optional<float> PriorityOf(const games::fc3::EntityInfo& entity,
     return std::nullopt;
   }
 
-  return esp::AimPriority(esp::KindOf(entity, self));
+  return WantedKind(games::fc3::KindOf(entity, self));
 }
 
 std::optional<aimbot::Target> Pick(
     const games::fc3::EntitySnapshot& snapshot,
     const games::fc3::CameraBasis& camera) noexcept {
   const config::Settings& kSettings{config::Current()};
-  const games::fc3::PawnInfo* const kSelf{esp::FindSelf(snapshot)};
+  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(snapshot)};
   const aimbot::Choice kChoice{
       .limits = {.maxDistance = kSettings.aimRange.load(),
                  .maxError = HalfConeRadians(kSettings.aimConeDegrees.load())},
@@ -107,7 +138,7 @@ void UpdateReach() noexcept {
   }
 
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  const games::fc3::PawnInfo* const kSelf{esp::FindSelf(kSnapshot)};
+  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
   const float kRange{config::Current().aimRange.load()};
   const float kCone{HalfConeRadians(config::Current().aimConeDegrees.load())};
 

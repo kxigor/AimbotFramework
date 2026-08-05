@@ -4,7 +4,8 @@ add_gtest(games_unit
     snapshot_unit.cpp
     handoff_unit.cpp
     bones_unit.cpp
-    classify_unit.cpp
+    entity_unit.cpp
+    kind_unit.cpp
     error_unit.cpp
   LIBRARIES afw::games::fc3 project_options project_sanitizers project_coverage
   INCLUDE_DIRECTORIES ${PROJECT_SOURCE_DIR}/tests/unit

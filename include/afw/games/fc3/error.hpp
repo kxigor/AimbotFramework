@@ -10,7 +10,6 @@ enum class Error : std::uint8_t {
   CameraUnavailable = 1,
   CameraNotFound = 2,
   CameraNotSane = 3,
-  ViewportNotSane = 4,
 };
 
 [[nodiscard]] const std::error_category& ErrorCategory();

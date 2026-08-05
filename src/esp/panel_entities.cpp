@@ -1,9 +1,10 @@
 #include <imgui.h>
 
-#include <afw/esp/internal/classify.hpp>
+#include <afw/esp/internal/palette.hpp>
 #include <afw/esp/internal/panel.hpp>
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/kind.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -77,7 +78,7 @@ void Insert(NearbyRows& rows, std::size_t& used, const Nearby& row) noexcept {
 
 void ShowNearby(const math::Vec3& eye) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  const games::fc3::PawnInfo* const kSelf{FindSelf(kSnapshot)};
+  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
   NearbyRows rows{};
   std::size_t used{0};
 
@@ -95,7 +96,7 @@ void ShowNearby(const math::Vec3& eye) {
     ImGui::Text("%8llX %5.1fm %-8s a%-3d f%-3d",
                 static_cast<std::uint64_t>(kEntity.address),
                 static_cast<double>(rows.at(index).distance),
-                KindName(KindOf(kEntity, kSelf)),
+                games::fc3::KindName(games::fc3::KindOf(kEntity, kSelf)),
                 kEntity.pawn ? kEntity.pawn->army : kNoPawnField,
                 kEntity.pawn ? kEntity.pawn->faction : kNoPawnField);
   }

@@ -1,9 +1,10 @@
+#include <afw/games/fc3/camera.hpp>
 #include <afw/games/fc3/error.hpp>
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/components.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>
+#include <afw/games/fc3/module.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/math/direction.hpp>
 #include <afw/process/memory.hpp>

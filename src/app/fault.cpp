@@ -6,14 +6,12 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <cstdio>
 #include <tuple>
 
 namespace afw::app {
 
 namespace {
 
-constexpr std::size_t kMessageChars{512};
 constexpr DWORD kWriteFlag{1};
 
 [[nodiscard]] LPTOP_LEVEL_EXCEPTION_FILTER& PreviousFilter() noexcept {

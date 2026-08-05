@@ -16,7 +16,7 @@ else()
 endif()
 
 # The DLL shim is Windows-only; only default it ON when we are top-level AND on
-# Windows so a Linux/macOS consumer of afw::core does not trip the shim's guard.
+# Windows so a Linux/macOS consumer of the libraries does not trip its guard.
 set(AFW_DLL_DEFAULT OFF)
 if(AFW_DEV_DEFAULT AND WIN32)
   set(AFW_DLL_DEFAULT ON)
@@ -86,7 +86,7 @@ if(WIN32)
   add_subdirectory(third_party)  # Dear ImGui submodule + Win32/D3D11 backends
 endif()
 
-add_subdirectory(src)          # afw::core (always)
+add_subdirectory(src)          # the afw::* libraries (always)
 
 if(AFW_BUILD_DLL)
   add_subdirectory(dll)        # aimbot.dll shim

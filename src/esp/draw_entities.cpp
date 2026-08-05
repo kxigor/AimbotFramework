@@ -1,11 +1,11 @@
 #include <imgui.h>
 
 #include <afw/config/config.hpp>
-#include <afw/esp/internal/classify.hpp>
 #include <afw/esp/internal/draw.hpp>
-#include <afw/esp/internal/settings.hpp>
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/palette.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/kind.hpp>
 #include <afw/math/angle.hpp>
 #include <array>
 #include <cstdint>
@@ -35,8 +35,6 @@ void DrawLabel(const games::fc3::EntityInfo& entity,
       ImVec2{rect.left, rect.top - kLabelLift}, colour, label.data());
 }
 
-// The box the shot is actually aimed into, drawn in its own colour when the
-// reach probe says a bullet would not get there.
 void DrawAimBox(const games::fc3::EntityInfo& entity,
                 const math::Matrix4& projection, const ImVec2& display,
                 ImU32 colour) {
@@ -131,7 +129,7 @@ void DrawDot(const games::fc3::EntityInfo& entity,
 void DrawEntities(const math::Vec3& eye, const math::Matrix4& projection,
                   const ImVec2& display) {
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  const games::fc3::PawnInfo* const kSelf{FindSelf(kSnapshot)};
+  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
 
   for (std::uint32_t index{0}; index < kSnapshot.count; ++index) {
     const games::fc3::EntityInfo& kEntity{kSnapshot.items.at(index)};
@@ -139,24 +137,26 @@ void DrawEntities(const math::Vec3& eye, const math::Matrix4& projection,
       continue;
     }
 
-    const Kind kKind{KindOf(kEntity, kSelf)};
+    const games::fc3::Kind kKind{games::fc3::KindOf(kEntity, kSelf)};
     if (!Shown(kKind)) {
       continue;
     }
 
     const ImU32 kColour{ColourOf(kEntity, kKind)};
-    if (kKind == Kind::Prop) {
+    if (kKind == games::fc3::Kind::Prop) {
       DrawDot(kEntity, projection, display, kColour);
       continue;
     }
 
-    if (kKind == Kind::Bird) {
+    if (kKind == games::fc3::Kind::Bird) {
       DrawTriangle(kEntity, projection, display, kColour);
-    } else if (kKind == Kind::Animal || kKind == Kind::Predator) {
+    } else if (kKind == games::fc3::Kind::Animal ||
+               kKind == games::fc3::Kind::Predator) {
       DrawRing(kEntity, projection, display, kColour);
     } else {
       DrawBox(kEntity, projection, display, kColour,
-              kKind == Kind::Vehicle ? kVehicleThickness : kBoxThickness);
+              kKind == games::fc3::Kind::Vehicle ? kVehicleThickness
+                                                 : kBoxThickness);
     }
 
     DrawAimBox(kEntity, projection, display, kColour);

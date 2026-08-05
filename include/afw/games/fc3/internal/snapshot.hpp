@@ -1,10 +1,15 @@
 #pragma once
 
-#include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/snapshot.hpp>
 #include <cstdint>
 
 namespace afw::games::fc3 {
 
+// Two threads meet here. The walk runs inside the engine's own entity update,
+// which is where the world may be read at all; the reader runs on the render
+// thread, inside Present, with no such guarantee. Anything that reads the world
+// belongs on the first and not the second.
+//
 // The walk writes here and the frame that follows publishes it. Three buffers,
 // so the reader keeps whatever it was handed for as long as it holds it: the
 // overlay iterates one snapshot across five passes and a whole ImGui build,

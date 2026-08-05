@@ -186,6 +186,48 @@ TEST_F(AimbotChoice, PriorityOutweighsAimWhenItIsWorthMore) {
   EXPECT_EQ(kTarget->entity, 0xAU);
 }
 
+// Every ranker above returns a bare float, which reaches Ranking only through
+// C++20 parenthesized aggregate initialisation and leaves `reach` at its
+// default. With `weights.reach` zero in all of them, the reach term was
+// untested and the suite could not have noticed it going wrong. These two name
+// the Ranking outright.
+TEST_F(AimbotChoice, AShotThatCannotGetThereLosesToOneThatCan) {
+  Add(0xA, Vec3{.x = 10.0F, .y = 0.0F, .z = 0.0F});
+  Add(0xB, Vec3{.x = 30.0F, .y = 6.0F, .z = 0.0F});
+
+  const Weights kByReach{
+      .aim = 0.2F, .distance = 0.0F, .priority = 0.0F, .reach = 1.0F};
+  const auto kTarget{ChooseTarget(
+      snapshot_, eye_, kEast, Choice{.limits = Wide(), .weights = kByReach},
+      [](const EntityInfo& entity) {
+        return std::optional<afw::aimbot::Ranking>{afw::aimbot::Ranking{
+            .priority = 0.0F, .reach = entity.address == 0xAU ? 0.0F : 1.0F}};
+      })};
+
+  ASSERT_TRUE(kTarget.has_value());
+  EXPECT_EQ(kTarget->entity, 0xBU);
+  EXPECT_FLOAT_EQ(kTarget->reach, 1.0F);
+}
+
+// And the weight has to be what decides it: with reach unweighted the same two
+// candidates come out the other way round.
+TEST_F(AimbotChoice, ReachIsIgnoredWhenItCarriesNoWeight) {
+  Add(0xA, Vec3{.x = 10.0F, .y = 0.0F, .z = 0.0F});
+  Add(0xB, Vec3{.x = 30.0F, .y = 6.0F, .z = 0.0F});
+
+  const Weights kByAim{
+      .aim = 0.2F, .distance = 0.0F, .priority = 0.0F, .reach = 0.0F};
+  const auto kTarget{ChooseTarget(
+      snapshot_, eye_, kEast, Choice{.limits = Wide(), .weights = kByAim},
+      [](const EntityInfo& entity) {
+        return std::optional<afw::aimbot::Ranking>{afw::aimbot::Ranking{
+            .priority = 0.0F, .reach = entity.address == 0xAU ? 0.0F : 1.0F}};
+      })};
+
+  ASSERT_TRUE(kTarget.has_value());
+  EXPECT_EQ(kTarget->entity, 0xAU);
+}
+
 // Weighing nothing at all must still answer, rather than tie itself into
 // picking nobody out of a world that has candidates in it.
 TEST_F(AimbotChoice, StillAnswersWhenEveryWeightIsZero) {

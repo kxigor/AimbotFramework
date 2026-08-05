@@ -23,14 +23,16 @@ struct CameraBasis {
   float fovHorizontalRadians{};
 };
 
-struct Viewport {
-  float width{};
-  float height{};
-};
-
 // One value per reason, because "it did not appear" is the symptom that costs
 // the most time here: an NPC standing in front of you and not drawn has to be
 // traceable to the exact test that dropped it.
+//
+// Count is a sentinel and never a reason. The census sizes an array by the
+// count and indexes it by the enumerator itself, inside a noexcept walk on the
+// engine's thread, so a reason appended without the count following it would be
+// a terminate in the game rather than a wrong number. Deriving the count keeps
+// the two in step; a hand-written number only catches an insertion in the
+// middle, which is not how a reason gets added.
 enum class Rejection : std::uint8_t {
   NoVtable,
   NotRigid,
@@ -38,9 +40,11 @@ enum class Rejection : std::uint8_t {
   NonFinite,
   BeyondTheWorld,
   TemplateSpawn,
+  Count,
 };
 
-constexpr std::size_t kRejectionCount{6};
+constexpr std::size_t kRejectionCount{
+    static_cast<std::size_t>(Rejection::Count)};
 
 // Read from a live civilian: army -1 with every bit set in the own-army mask,
 // faction -2. Soldiers instead carry an army in range and exactly the one bit
@@ -69,9 +73,16 @@ constexpr std::int32_t kFactionPrivateer{3};
 // Which agent drives the entity. Siblings in the registry, and the engine's own
 // discriminator: CastToCPawnAgent fails on an animal and CastToCAnimalAgentFC3
 // fails on a human.
+// No Count sentinel here, unlike Rejection: ClassDefOf switches on this without
+// a usable default, so -Werror=switch-enum already refuses a kind that has been
+// added and not given a class definition. A sentinel would only make that
+// switch name a case that is not a kind.
 enum class AgentKind : std::uint8_t { Pawn, Animal, SimpleAnimal, Vehicle };
 
 constexpr std::size_t kAgentKindCount{4};
+
+static_assert(kAgentKindCount ==
+              static_cast<std::size_t>(AgentKind::Vehicle) + 1);
 
 struct PawnInfo {
   AgentKind kind{AgentKind::Pawn};

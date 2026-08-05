@@ -25,6 +25,10 @@ struct ViewAngles {
   return radians * kDegreesPerHalfTurn / kHalfTurn;
 }
 
+[[nodiscard]] constexpr float HalfAngle(float degrees) noexcept {
+  return Radians(degrees * kHalf);
+}
+
 [[nodiscard]] inline float WrapAngle(float radians) noexcept {
   if (!std::isfinite(radians)) {
     return 0.0F;

@@ -2,28 +2,26 @@
 
 #include <afw/esp/internal/panel.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/math/angle.hpp>
 #include <afw/render/overlay.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
-#include <numbers>
 #include <optional>
 
 namespace afw::esp {
 
 namespace {
 
-constexpr double kHalf{0.5};
-constexpr double kDegreesPerHalfTurn{180.0};
+constexpr std::array kRejectionNames{"no vtable",        "not rigid",
+                                     "bad box",          "not finite",
+                                     "beyond the world", "template spawn"};
 
-constexpr std::array<const char*, games::fc3::kRejectionCount> kRejectionNames{
-    "no vtable",  "not rigid",        "bad box",
-    "not finite", "beyond the world", "template spawn"};
+static_assert(kRejectionNames.size() == games::fc3::kRejectionCount);
 
 void ShowAngle(const char* label, float radians) {
-  ImGui::Text(
-      "%-18s %.4f rad = %.2f deg", label, static_cast<double>(radians),
-      static_cast<double>(radians) * kDegreesPerHalfTurn / std::numbers::pi);
+  ImGui::Text("%-18s %.4f rad = %.2f deg", label, static_cast<double>(radians),
+              static_cast<double>(math::Degrees(radians)));
 }
 
 void ShowCensus() {
@@ -134,8 +132,8 @@ void ShowMarkers(const ImVec2& display,
                  const std::optional<math::ScreenPoint>& probe) {
   ImGui::SeparatorText("markers");
   ImGui::Text("%-18s %8.1f %8.1f", "screen centre",
-              static_cast<double>(display.x) * kHalf,
-              static_cast<double>(display.y) * kHalf);
+              static_cast<double>(display.x * math::kHalf),
+              static_cast<double>(display.y * math::kHalf));
   ShowPoint("ahead 2m", ahead);
   ShowPoint("right 2m at 10m", probe);
 }

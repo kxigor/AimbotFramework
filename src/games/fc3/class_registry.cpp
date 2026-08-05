@@ -1,10 +1,10 @@
 #include <afw/abi/abi.hpp>
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/class_registry.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>
+#include <afw/games/fc3/module.hpp>
 #include <array>
 #include <bit>
 #include <cstdint>

@@ -2,7 +2,7 @@
 
 #include <afw/config/config.hpp>
 #include <afw/esp/internal/draw.hpp>
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/math/angle.hpp>
 #include <algorithm>
 #include <cmath>
@@ -30,8 +30,7 @@ void DrawAimCone(const ImVec2& display, float verticalFov) {
     return;
   }
 
-  const float kCone{
-      math::Radians(kSettings.aimConeDegrees.load() * math::kHalf)};
+  const float kCone{math::HalfAngle(kSettings.aimConeDegrees.load())};
   if (kCone >= math::kQuarterTurn) {
     return;
   }

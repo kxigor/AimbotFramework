@@ -1,11 +1,12 @@
 #include <windows.h>
 
-#include <afw/games/fc3/error.hpp>
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
+#include <afw/games/fc3/internal/read.hpp>
+#include <afw/games/fc3/module.hpp>
 #include <afw/process/memory.hpp>
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <system_error>
 
 namespace afw::games::fc3 {
@@ -28,17 +29,18 @@ namespace {
 }
 
 void FillViewport(Diagnostics& report) noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kBlock{
-      process::ReadPointerAs<EnginePtr>(report.viewportAddress)};
+  const std::optional<std::uintptr_t> kBlock{
+      Engine{report.viewportAddress}.Pointer(0)};
   if (!kBlock) {
     return;
   }
   report.viewportBlock = *kBlock;
 
-  const std::expected<std::int32_t, std::error_code> kWidth{
-      process::ReadAt<std::int32_t>(report.viewportBlock + kViewportWidth)};
-  const std::expected<std::int32_t, std::error_code> kHeight{
-      process::ReadAt<std::int32_t>(report.viewportBlock + kViewportHeight)};
+  const Engine kViewport{report.viewportBlock};
+  const std::optional<std::int32_t> kWidth{
+      kViewport.Field<std::int32_t>(kViewportWidth)};
+  const std::optional<std::int32_t> kHeight{
+      kViewport.Field<std::int32_t>(kViewportHeight)};
   if (!kWidth || !kHeight) {
     return;
   }
@@ -48,37 +50,37 @@ void FillViewport(Diagnostics& report) noexcept {
 }
 
 void FillCameraChain(Diagnostics& report) noexcept {
-  const std::expected<std::uintptr_t, std::error_code> kContainer{
-      process::ReadPointerAs<EnginePtr>(report.containerAddress)};
+  const std::optional<std::uintptr_t> kContainer{
+      Engine{report.containerAddress}.Pointer(0)};
   if (!kContainer) {
     return;
   }
   report.container = *kContainer;
 
-  const std::expected<std::int32_t, std::error_code> kLive{
-      process::ReadAt<std::int32_t>(report.container + kContainerLiveFlag)};
+  const Engine kLiveContainer{report.container};
+  const std::optional<std::int32_t> kLive{
+      kLiveContainer.Field<std::int32_t>(kContainerLiveFlag)};
   if (!kLive || *kLive == 0) {
     return;
   }
   report.liveFlag = *kLive;
 
-  const std::expected<std::uintptr_t, std::error_code> kManagerSlot{
-      process::ReadPointerAs<EnginePtr>(report.container +
-                                        kContainerManagerSlot)};
+  const std::optional<std::uintptr_t> kManagerSlot{
+      kLiveContainer.Pointer(kContainerManagerSlot)};
   if (!kManagerSlot) {
     return;
   }
 
-  const std::expected<std::uintptr_t, std::error_code> kManager{
-      process::ReadPointerAs<EnginePtr>(*kManagerSlot)};
+  const std::optional<std::uintptr_t> kManager{
+      Engine{*kManagerSlot}.Pointer(0)};
   if (!kManager) {
     return;
   }
   report.manager = *kManager;
 
-  const std::expected<std::uintptr_t, std::error_code> kViewBase{
-      process::ReadPointerAs<EnginePtr>(report.manager + kManagerViewSlot)};
-  if (!kViewBase || *kViewBase == 0) {
+  const std::optional<std::uintptr_t> kViewBase{
+      Engine{report.manager}.Pointer(kManagerViewSlot)};
+  if (!kViewBase) {
     return;
   }
   report.cameraView = *kViewBase + kViewOffset;

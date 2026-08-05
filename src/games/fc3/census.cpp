@@ -1,9 +1,10 @@
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/entity.hpp>
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/internal/snapshot.hpp>
+#include <afw/games/fc3/module.hpp>
+#include <afw/games/fc3/snapshot.hpp>
 #include <afw/process/memory.hpp>
 #include <bit>
 #include <cstdint>
@@ -54,8 +55,6 @@ void AcceptEntity(std::uintptr_t address, EntitySnapshot& snapshot,
   }
 }
 
-// An update group queues components as well as entities, so something that is
-// not an entity is asked for the entity it belongs to before it is written off.
 void StoreEntity(std::uintptr_t address, EntitySnapshot& snapshot,
                  std::uint32_t typeBit) noexcept {
   if (IsEntityClass(address)) {
@@ -135,8 +134,6 @@ void TakeCensus(std::uintptr_t scheduler) noexcept {
     return;
   }
 
-  // Capped rather than refused: a scheduler with a wrong count still holds real
-  // groups at the front of its array, and the overflow is reported instead.
   const std::uint32_t kVisited{*kWanted < kMaxGroups ? *kWanted : kMaxGroups};
   census.skipped += *kWanted - kVisited;
 

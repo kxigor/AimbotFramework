@@ -1,6 +1,6 @@
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/internal/snapshot.hpp>
+#include <afw/games/fc3/snapshot.hpp>
 #include <afw/process/memory.hpp>
 #include <array>
 #include <atomic>

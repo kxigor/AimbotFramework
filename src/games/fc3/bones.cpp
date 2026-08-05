@@ -44,9 +44,6 @@ namespace {
   return std::nullopt;
 }
 
-// A head belongs to the body it was read from: the matrix that places it comes
-// from a component chosen by its contents, and a stale one already put an
-// entity 118 m from itself once.
 [[nodiscard]] std::optional<math::Vec3> BoneNear(
     const RigidComponent& component, std::uint32_t key,
     const math::Vec3& origin) noexcept {

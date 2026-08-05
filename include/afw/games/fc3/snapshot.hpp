@@ -13,16 +13,10 @@ using RunAllGroupFn = void(AFW_ENGINE_CALL*)(void* scheduler);
 
 [[nodiscard]] void** RunAllGroupSlot() noexcept;
 
-// Called from inside the engine's own entity update, once per pass. Several
-// passes make one generation.
 void TakeCensus(std::uintptr_t scheduler) noexcept;
 
-// Called once per presented frame: hands the reader whatever generation is
-// complete and asks the next walk to start a new one.
 void PublishCensus() noexcept;
 
-// How much walking the last generation took, which is what tells a world that
-// is empty from one that was never walked.
 struct EntityCensus {
   std::uint32_t frames{};
   std::uint32_t calls{};
@@ -33,8 +27,6 @@ struct EntityCensus {
 
 [[nodiscard]] EntityCensus LastCensus() noexcept;
 
-// Holds the hook the census reads its original through, for as long as the hook
-// is installed.
 class UpdateBinding {
  public:
   explicit UpdateBinding(const hook::Hook& hook) noexcept;
@@ -56,9 +48,6 @@ constexpr std::size_t kRejectedSamples{8};
 
 constexpr std::size_t kGroupTypes{32};
 
-// One world as the last complete walk found it, with a tally of everything the
-// walk threw away beside it: an NPC standing in front of you and not drawn has
-// to be traceable to the exact test that dropped it.
 struct EntitySnapshot {
   void ForgetCounts() noexcept {
     count = 0;
@@ -113,8 +102,6 @@ struct EntitySnapshot {
   std::array<EntityInfo, kMaxEntities> items{};
 };
 
-// The reader owns what this returns until the next PublishCensus, so it may be
-// held across a whole frame's drawing.
 [[nodiscard]] const EntitySnapshot& LastSnapshot() noexcept;
 
 }  // namespace afw::games::fc3

@@ -1,7 +1,7 @@
 #include <imgui.h>
 
 #include <afw/esp/internal/panel.hpp>
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <algorithm>
 #include <array>

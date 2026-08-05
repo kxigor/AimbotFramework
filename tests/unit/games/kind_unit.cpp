@@ -1,12 +1,12 @@
 #include <gtest/gtest.h>
 
-#include <afw/esp/internal/classify.hpp>
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/games/fc3/internal/kind.hpp>
 
 namespace {
 
-using afw::esp::Kind;
 using afw::games::fc3::AgentKind;
+using afw::games::fc3::Kind;
 using afw::games::fc3::PawnInfo;
 
 // Every value below was read out of the running game, so these cases pin
@@ -60,51 +60,51 @@ using afw::games::fc3::PawnInfo;
 
 }  // namespace
 
-TEST(EspClassifyUnit, APirateIsAnEnemyByFaction) {
+TEST(Fc3KindUnit, APirateIsAnEnemyByFaction) {
   const PawnInfo kSelf{Player()};
 
-  EXPECT_EQ(afw::esp::KindOfPawn(Pirate(), &kSelf), Kind::Enemy);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(Pirate(), &kSelf), Kind::Enemy);
 }
 
-TEST(EspClassifyUnit, ARakyatIsAnAllyByFaction) {
+TEST(Fc3KindUnit, ARakyatIsAnAllyByFaction) {
   const PawnInfo kSelf{Player()};
 
-  EXPECT_EQ(afw::esp::KindOfPawn(Rakyat(), &kSelf), Kind::Ally);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(Rakyat(), &kSelf), Kind::Ally);
 }
 
 // Army 5 is a real army, and an earlier version answered "has an army, so it is
 // an enemy" and painted every civilian red. The engine's predicate says
 // otherwise: 0x20 & 0x03 is zero.
-TEST(EspClassifyUnit, ACivilianWithAnArmyIsStillNotAnEnemy) {
+TEST(Fc3KindUnit, ACivilianWithAnArmyIsStillNotAnEnemy) {
   const PawnInfo kSelf{Player()};
 
-  EXPECT_FALSE(afw::esp::ArmiesHostile(kSelf, Civilian()));
-  EXPECT_EQ(afw::esp::KindOfPawn(Civilian(), &kSelf), Kind::Civilian);
+  EXPECT_FALSE(afw::games::fc3::ArmiesHostile(kSelf, Civilian()));
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(Civilian(), &kSelf), Kind::Civilian);
 }
 
-TEST(EspClassifyUnit, HostilityIsDecidedByTheMasksNotTheArmyNumber) {
+TEST(Fc3KindUnit, HostilityIsDecidedByTheMasksNotTheArmyNumber) {
   const PawnInfo kSelf{Player()};
 
-  EXPECT_TRUE(afw::esp::ArmiesHostile(kSelf, Pirate()));
+  EXPECT_TRUE(afw::games::fc3::ArmiesHostile(kSelf, Pirate()));
 }
 
-TEST(EspClassifyUnit, TheAgentTypeOutranksTheFaction) {
+TEST(Fc3KindUnit, TheAgentTypeOutranksTheFaction) {
   const PawnInfo kSelf{Player()};
 
   PawnInfo companion{Pirate()};
   companion.agentType = afw::games::fc3::kAgentCompanion;
-  EXPECT_EQ(afw::esp::KindOfPawn(companion, &kSelf), Kind::Ally);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(companion, &kSelf), Kind::Ally);
 
   PawnInfo civilian{Pirate()};
   civilian.agentType = afw::games::fc3::kAgentCivilian;
-  EXPECT_EQ(afw::esp::KindOfPawn(civilian, &kSelf), Kind::Civilian);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(civilian, &kSelf), Kind::Civilian);
 
-  EXPECT_EQ(afw::esp::KindOfPawn(Player(), &kSelf), Kind::Self);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(Player(), &kSelf), Kind::Self);
 }
 
 // The class of the agent settles it before any field is read, which is what
 // makes a boar a boar however oddly its bounding box is shaped.
-TEST(EspClassifyUnit, TheAgentClassOutranksEverything) {
+TEST(Fc3KindUnit, TheAgentClassOutranksEverything) {
   const PawnInfo kSelf{Player()};
 
   PawnInfo animal{Pirate()};
@@ -112,70 +112,59 @@ TEST(EspClassifyUnit, TheAgentClassOutranksEverything) {
   animal.ownArmyBit = 0x08;
   animal.hostileMask = 0x37;
   animal.reverseHostileMask = 0x00;
-  EXPECT_EQ(afw::esp::KindOfPawn(animal, &kSelf), Kind::Animal);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(animal, &kSelf), Kind::Animal);
 
   PawnInfo bird{Pirate()};
   bird.kind = AgentKind::SimpleAnimal;
-  EXPECT_EQ(afw::esp::KindOfPawn(bird, &kSelf), Kind::Bird);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(bird, &kSelf), Kind::Bird);
 
   PawnInfo vehicle{Pirate()};
   vehicle.kind = AgentKind::Vehicle;
-  EXPECT_EQ(afw::esp::KindOfPawn(vehicle, &kSelf), Kind::Vehicle);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(vehicle, &kSelf), Kind::Vehicle);
 }
 
-TEST(EspClassifyUnit, AnAnimalHostileToThePlayerIsAPredator) {
+TEST(Fc3KindUnit, AnAnimalHostileToThePlayerIsAPredator) {
   const PawnInfo kSelf{Player()};
 
   PawnInfo predator{Pirate()};
   predator.kind = AgentKind::Animal;
   predator.reverseHostileMask = kSelf.ownArmyBit;
 
-  EXPECT_EQ(afw::esp::KindOfPawn(predator, &kSelf), Kind::Predator);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(predator, &kSelf), Kind::Predator);
 }
 
 // Without a player there is nobody to be hostile towards, and answering "enemy"
 // there once painted a whole village red.
-TEST(EspClassifyUnit, WithoutAPlayerNobodyBecomesAnEnemyByTheMasks) {
+TEST(Fc3KindUnit, WithoutAPlayerNobodyBecomesAnEnemyByTheMasks) {
   PawnInfo stranger{Civilian()};
   stranger.faction = afw::games::fc3::kFactionUnknown;
 
-  EXPECT_EQ(afw::esp::KindOfPawn(stranger, nullptr), Kind::Civilian);
+  EXPECT_EQ(afw::games::fc3::KindOfPawn(stranger, nullptr), Kind::Civilian);
 }
 
-TEST(EspClassifyUnit, AnEntityWithoutAPawnRecordIsAProp) {
+TEST(Fc3KindUnit, AnEntityWithoutAPawnRecordIsAProp) {
   const afw::games::fc3::EntityInfo kEntity{};
 
-  EXPECT_EQ(afw::esp::KindOf(kEntity, nullptr), Kind::Prop);
+  EXPECT_EQ(afw::games::fc3::KindOf(kEntity, nullptr), Kind::Prop);
 }
 
-TEST(EspClassifyUnit, TheDeadKeepTheirOwnColourWhateverTheyWere) {
-  afw::games::fc3::EntityInfo entity{};
-  entity.pawn = Pirate();
-  entity.pawn->dead = true;
-
-  const std::uint32_t kDead{afw::esp::ColourOf(entity, Kind::Enemy)};
-  entity.pawn->dead = false;
-
-  EXPECT_NE(kDead, afw::esp::ColourOf(entity, Kind::Enemy));
-}
-
-TEST(EspClassifyUnit, FindSelfPicksThePlayerAndNotTheNearestPawn) {
+TEST(Fc3KindUnit, FindSelfPicksThePlayerAndNotTheNearestPawn) {
   static afw::games::fc3::EntitySnapshot snapshot{};
   snapshot.count = 3;
   snapshot.items.at(0).pawn = Pirate();
   snapshot.items.at(1).pawn = Player();
   snapshot.items.at(2).pawn = Rakyat();
 
-  const PawnInfo* const kSelf{afw::esp::FindSelf(snapshot)};
+  const PawnInfo* const kSelf{afw::games::fc3::FindSelf(snapshot)};
 
   ASSERT_NE(kSelf, nullptr);
   EXPECT_EQ(kSelf->agentType, afw::games::fc3::kAgentPlayer);
 }
 
-TEST(EspClassifyUnit, FindSelfIsNullWhenThePlayerIsAbsent) {
+TEST(Fc3KindUnit, FindSelfIsNullWhenThePlayerIsAbsent) {
   static afw::games::fc3::EntitySnapshot snapshot{};
   snapshot.count = 1;
   snapshot.items.at(0).pawn = Pirate();
 
-  EXPECT_EQ(afw::esp::FindSelf(snapshot), nullptr);
+  EXPECT_EQ(afw::games::fc3::FindSelf(snapshot), nullptr);
 }

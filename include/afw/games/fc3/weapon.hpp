@@ -6,9 +6,6 @@
 
 namespace afw::games::fc3 {
 
-// Each of these finds one site by signature and overwrites a handful of bytes,
-// and each undoes itself when the patch it returns is dropped. Holding one is
-// what keeps it applied.
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code>
 SuppressRecoil() noexcept;
 

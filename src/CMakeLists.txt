@@ -7,7 +7,7 @@
 #
 #   afw::process      generic access to the host process (memory, modules, scan)
 #   afw::games::<t>   per-title, engine-specific bindings; depend on afw::process
-#   afw::aimbot       the aim-assist logic (engine-agnostic)
+#   afw::aimbot       target choice and the geometry of pointing at one
 #   afw::config       settings shared by the overlay's consumers
 #   afw::win          RAII wrappers over raw Win32 resources (handles, memory)
 #   afw::remote       Windows DLL-injection helpers (Toolhelp + CreateRemoteThread)
@@ -21,13 +21,12 @@
 # esp are siblings on top of render, sharing state only through config, so
 # neither one requires the other to run. afw::app sits on top of render and
 # menu and knows no game; the DLL shim supplies one through afw::app::Game.
-# None contains a Windows entry point. process / games / aimbot are still empty
-# skeletons; afw::remote is implemented and Windows-only.
+# None contains a Windows entry point.
 
 add_subdirectory(config)
 add_subdirectory(math)
 
-# Windows-only libraries; skip on non-Windows so afw::core still configures for
+# Windows-only libraries; skip on non-Windows so the rest still configures for
 # a Linux/macOS consumer. Ordered by dependency: win before remote and hook,
 # hook before render, render before its two consumers. process reads this
 # process's own memory through the Win32 API, so games and aimbot, which build

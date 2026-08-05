@@ -2,7 +2,7 @@
 
 #include <imgui.h>
 
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <optional>
 
 namespace afw::esp {

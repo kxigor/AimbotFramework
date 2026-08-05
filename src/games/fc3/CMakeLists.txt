@@ -3,11 +3,12 @@
 # =========================================================
 # Far Cry 3 (Dunia) specific bindings: offsets, structures, and the workflow to
 # read entities / bones / view matrix. Builds on the generic afw::process.
-# Skeleton for now. One target per game so you link only the title you target.
+# One target per game so you link only the title you target.
 
 add_library(afw_games_fc3 STATIC
   module.cpp
   camera.cpp
+  kind.cpp
   class_registry.cpp
   components.cpp
   entity.cpp

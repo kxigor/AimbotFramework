@@ -1,6 +1,6 @@
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/layout/module.hpp>
 #include <afw/games/fc3/internal/signatures.hpp>
+#include <afw/games/fc3/weapon.hpp>
 #include <afw/hook/patch.hpp>
 #include <afw/process/scan.hpp>
 #include <array>
@@ -13,9 +13,6 @@ namespace afw::games::fc3 {
 
 namespace {
 
-// Every one of these finds its site by signature rather than by address, so a
-// patched or relocated image either matches or reports that it did not, and
-// never writes over something else.
 [[nodiscard]] std::expected<hook::CodePatch, std::error_code> PatchAt(
     const char* signature, std::uintptr_t offset,
     std::span<const std::uint8_t> bytes) noexcept {

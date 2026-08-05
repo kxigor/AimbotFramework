@@ -17,9 +17,6 @@ namespace {
   return faction >= kNoFaction && faction <= kMaxFaction;
 }
 
-// A field that reads back nonsense costs that field and not the record: what
-// the record exists for is the agent's class, and that was established before
-// any of these was read.
 void ReadPawnAgentFields(std::uintptr_t agent, PawnInfo& pawn) noexcept {
   const Engine kAgent{agent};
   const std::optional<std::int32_t> kArmy{

@@ -56,17 +56,24 @@ Implemented:
   one level down — bytes written over the game's own instructions and put back
   when it goes away, so a setting that is switched off leaves nothing behind.
 - **`afw::process`** — module bases and reads that report an unreadable address
-  instead of faulting: a wrong offset becomes a `std::error_code`, not a crash in
-  the host process. `FindPattern` locates code by a masked byte signature over
-  the module's own image, which is what lets a patch survive a different build of
-  the game where a number lifted out of a decompiler would not.
+  instead of faulting: a wrong offset becomes a failed read, not a crash in the
+  host process. `Reader` and `PointerArray` are the vocabulary that reading is
+  actually done in — a field, a non-null pointer, a count bounded before it can
+  become a loop limit, and an array whose base and count were validated
+  together. A foreign count is the thing that turns one wrong offset into a walk
+  of the address space, so it is checked in one place rather than at every loop.
+  `FindPattern` locates code by a masked byte signature over the module's own
+  image, which is what lets a patch survive a different build of the game where a
+  number lifted out of a decompiler would not.
 - **`afw::render`** — obtains the swap chain vtable from a throwaway WARP probe,
   owns the `Present` binding, and draws the ImGui overlay, offering its users a
   per-frame callback.
-- **`afw::esp`** — world-to-screen: view and projection matrices built by hand,
-  `w`-clipping for points behind the camera, entity boxes from the eight
-  projected corners of an object-space AABB, plus a diagnostics panel showing
-  every address, offset and matrix input in play.
+- **`afw::esp`** — what the overlay draws over the frame: entity boxes, aim
+  cubes, the assist cone, and a diagnostics panel showing every address, offset
+  and matrix input in play. Its public surface is one function, `DrawFrame()`;
+  the projection it draws with belongs to `afw::math` and the classification it
+  colours by belongs to the game, so what is left here is presentation and
+  nothing else.
 - **`afw::games::fc3`** — Far Cry 3 bindings: the pointer chain to the live
   camera, its basis and field of view, the render viewport, and the per-frame
   walk over the engine's entity update groups. Every step is a checked read, and
@@ -78,19 +85,30 @@ Implemented:
   - finds the skeleton and hands back the bones worth aiming at: the head on a
     man, the spine on an animal or a bird, whose own coordinates are nowhere near
     its body;
-  - holds the four byte patches — recoil, sway, spread and the empty-magazine
-    check — each found by signature and each explained where it lives, because a
-    patch nobody can re-derive is a patch nobody can trust;
+  - holds the five byte patches — recoil, sway, spread, the spent round and the
+    empty-magazine check — each found by signature and each explained where it
+    lives, because a patch nobody can re-derive is a patch nobody can trust;
   - puts segments to the engine's own collision world and reads the answers back
-    out of it, which is how a target behind cover is known to be behind cover.
-- **`afw::math`** — `Vec3` and the algebra on it. It is also the wire format:
-  the engine stores three consecutive floats wherever a point or an axis goes,
-  so `afw::process::ReadAt` copies straight into it and nothing converts
-  anywhere between reading the game's memory and projecting to the screen. That
-  is what keeps it a trivially copyable aggregate — a constructor or a private
+    out of it, which is how a target behind cover is known to be behind cover;
+  - says what an entity **is** — enemy, ally, civilian, predator, animal, bird,
+    vehicle, prop — from the class of its agent and the faction it was
+    registered with, never from the shape of its box. That answer belongs to the
+    game rather than to the overlay: a boar's box is longer than a car's.
+- **`afw::math`** — `Vec3`, `Matrix4`, `Aabb` and every operation on them:
+  angles and the conversions between them, a direction turned into a yaw and a
+  pitch, and world-to-screen — view and projection matrices built by hand,
+  `w`-clipping for points behind the camera, a screen rectangle from the eight
+  projected corners of an object-space box. All of it header-only, because each
+  is a handful of float operations on the path every entity takes every frame.
+  These types are also the wire format: the engine stores three consecutive
+  floats wherever a point or an axis goes, so a read copies straight into them
+  and nothing converts anywhere between the game's memory and the screen. That
+  is what keeps them trivially copyable aggregates — a constructor or a private
   member would silently change what every read returns.
-- **`afw::aimbot`** — the aim assist, kept engine-agnostic: it is handed a
-  snapshot and an eye, and holds no opinion about who is hostile. Candidates
+- **`afw::aimbot`** — target choice and the geometry of pointing at one: it is
+  handed a snapshot and an eye, and holds no opinion about who is hostile — the
+  caller says what a kind is worth. Its arithmetic is engine-agnostic; its input
+  type is not yet, and that is the seam the second title breaks. Candidates
   inside the cone are **scored, not merely filtered** — closeness to the aim,
   closeness in distance, what the caller thinks the kind is worth, and whether a
   shot would get there at all. Each term is a 0..1 nearness before its weight
@@ -234,9 +252,17 @@ tests run on any platform.
 The two edges that do not belong in that picture are `esp -.-> games::fc3` and
 `aimbot --> games::fc3`. They are drawn because they are real, not because they
 are right: both reach into one specific title for their entity list instead of
-being handed one. The aim assist calls itself engine-agnostic and is, in its
-arithmetic — angles, scores, weights — but its input type still has a game's name
-on it, and that is the seam the second title will break.
+being handed one. The aim assist is engine-agnostic in its arithmetic — angles,
+scores, weights — but its input type still has a game's name on it, and that is
+the seam the second title will break.
+
+What is no longer wrong there: the overlay used to own the entity
+classification, so the aim path reached into `esp` for it and the two libraries
+were coupled through a private header. Naming an entity is something the engine
+does, so it now lives in `games::fc3`; `esp` keeps only the colour and the
+"draw this kind?" question, and the shim keeps "aim at this kind?". The only
+`esp` header anything outside the library includes is now `esp.hpp`, and the
+only thing in it is `DrawFrame()`.
 
 The types themselves:
 
@@ -465,9 +491,14 @@ injector/
 dll/
   dllmain.cpp           entry point -> starts a thread, hands one Game to
                         afw::app::Run, and nothing else
-  farcry3.cpp/.hpp      the Far Cry 3 Game: its entity-walk detour, the aim
-                        assist and auto-fire, which patches are held, the
-                        reachability queries and the status line
+  farcry3.cpp/.hpp      the Far Cry 3 Game: the entity-walk detour and the two
+                        callbacks, and nothing else
+  internal.hpp          what the shim's own translation units share
+  target.cpp            who to shoot: priority per kind, the weighted pick, the
+                        camera state, the reachability queries
+  assist.cpp            how to point at them: view steering and auto-fire
+  steady.cpp            which weapon patches are held
+  probe.cpp             the trace probe and the status line
 tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
@@ -477,9 +508,19 @@ on `render`, `menu` and `hook` and knows no game; `esp` and `aimbot` both sit
 still on `games::fc3`; `menu` is `esp`'s sibling and they share `config`. No
 library contains a Windows entry point.
 
-`dll/` is flat because there is one title in it. Each title gets its own DLL —
-the game is chosen at link time, never at run time — so a second one means a
-second target, not a runtime switch.
+Each library keeps what only it may see under `internal/`, and nothing outside
+that library includes it. `afw::esp` publishes one header; `afw::games::fc3`
+publishes one per subject — module, camera, snapshot, trace, weapon — plus its
+error category and an umbrella for callers who want the lot. Each of its own
+sources includes the header it implements rather than the umbrella, so every
+one of them compiles standalone and a change to one subject does not rebuild
+the rest.
+
+`dll/` is flat because there is one title in it, and split by what each part is
+for rather than by layer: `farcry3.cpp` is only the `Game` and the detour, and
+the work hangs off it in four files. Each title gets its own DLL — the game is
+chosen at link time, never at run time — so a second one means a second target,
+not a runtime switch.
 
 `afw::process` reads this process's memory through the Win32 API, so it and the
 libraries built on it (`games::*`, `aimbot`) are added only under `WIN32`;
@@ -623,9 +664,10 @@ own instructions, found by signature rather than by address, and every one of
 them is put back the moment its toggle goes off or the DLL unloads. That is the
 whole safety story: nothing is patched permanently, and nothing is patched that
 cannot be found again on a different build. The signatures and the reasoning
-behind each patch live next to the offsets they use, in
-`include/afw/games/fc3/internal/layout.hpp`, which is the one place in the
-project where comments are not only allowed but the point.
+behind each patch live in `include/afw/games/fc3/internal/signatures.hpp`,
+beside the offsets they work on in `internal/layout/`. Those headers are the one
+place in the project where comments are not only allowed but the point: a fact
+about the binary cannot be inferred from the code that reads it.
 
 Unloading restores the window procedure and both hooked slots in the reverse
 order they went on, waits for the threads still inside a detour to leave, then

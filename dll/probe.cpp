@@ -30,8 +30,6 @@ void LogAnswer(int query, const games::fc3::TraceAnswer& answer) {
 
 }  // namespace
 
-// A walk is filed under an id and answered some frames later, so the probe
-// keeps the id it is waiting on rather than asking and reading in one breath.
 void ProbeTrace() {
   static std::uint64_t frames{0};
   static std::optional<int> pending;

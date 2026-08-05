@@ -1,5 +1,5 @@
-#include <afw/games/fc3/fc3.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
+#include <afw/games/fc3/trace.hpp>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -44,9 +44,6 @@ struct Reach {
   return *oldest;
 }
 
-// A walk that hit nothing reached its target. A walk that hit something reached
-// it too if the first thing it met was as far off as the target itself, within
-// the slack a bounding box costs.
 [[nodiscard]] bool Reached(const TraceAnswer& answer, const math::Vec3& eye,
                            float span) noexcept {
   if (answer.hits == 0) {

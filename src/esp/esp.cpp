@@ -4,7 +4,7 @@
 #include <afw/esp/esp.hpp>
 #include <afw/esp/internal/draw.hpp>
 #include <afw/esp/internal/panel.hpp>
-#include <afw/esp/projection.hpp>
+#include <afw/esp/internal/projection.hpp>
 #include <afw/games/fc3/fc3.hpp>
 #include <expected>
 #include <optional>
@@ -51,8 +51,6 @@ void ShowPanelBody(const math::Vec3& eye, const math::Vec3& forward,
   ShowVtables();
 }
 
-}  // namespace
-
 void ShowPanel(const games::fc3::CameraBasis& camera, const ImVec2& display,
                const Markers& markers) {
   const float kAspect{display.x / display.y};
@@ -74,8 +72,10 @@ void ShowNoCamera(const char* reason) {
   ImGui::End();
 }
 
+}  // namespace
+
 void DrawFrame() noexcept {
-  if (!config::Current().espEnabled) {
+  if (!config::Current().espEnabled.load()) {
     return;
   }
 

@@ -20,7 +20,6 @@
 #include <array>
 #include <atomic>
 #include <cstddef>
-#include <cstdio>
 #include <expected>
 #include <system_error>
 
@@ -28,7 +27,6 @@ namespace afw::app {
 
 namespace {
 
-constexpr std::size_t kMessageChars{256};
 constexpr DWORD kWindowPollMilliseconds{50};
 constexpr int kWindowPollTicks{200};
 
