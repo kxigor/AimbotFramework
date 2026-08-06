@@ -4,6 +4,7 @@ add_gtest(math_unit
     aabb_unit.cpp
     matrix4_unit.cpp
     angle_unit.cpp
+    scale_unit.cpp
     projection_unit.cpp
   LIBRARIES afw::math project_options project_sanitizers project_coverage
   PROPERTIES TIMEOUT 30

@@ -1,114 +1,104 @@
 #pragma once
 
 #include <afw/games/fc3/fc3.hpp>
-#include <afw/math/angle.hpp>
-#include <afw/math/direction.hpp>
+#include <afw/math/ray.hpp>
+#include <afw/math/scale.hpp>
 #include <afw/math/vec3.hpp>
 #include <cstdint>
 #include <optional>
 
 namespace afw::aimbot {
 
-struct Target {
-  std::uintptr_t entity{};
-  math::Vec3 point{};
-  float error{};
-  float distance{};
-  float priority{};
-  float reach{};
+struct Ranking {
+  constexpr Ranking(float priority, float reach) noexcept
+      : priority{priority}, reach{reach} {}
+
+  float priority;
+  float reach;
 };
 
-struct Ranking {
-  float priority{};
-  float reach{1.0F};
+struct Target {
+  // NOLINTNEXTLINE(readability-function-size)
+  Target(std::uintptr_t entity, const math::Vec3& point, float error,
+         float distance, float priority, float reach) noexcept
+      : entity{entity},
+        point{point},
+        error{error},
+        distance{distance},
+        priority{priority},
+        reach{reach} {}
+
+  std::uintptr_t entity;
+  math::Vec3 point;
+  float error;
+  float distance;
+  float priority;
+  float reach;
 };
+
+using RankFn =
+    std::optional<Ranking> (*)(const games::fc3::EntityInfo& entity,
+                               const games::fc3::PawnInfo* self) noexcept;
 
 struct Limits {
-  float maxDistance{};
-  float maxError{};
+  constexpr Limits(float maxDistance, float maxError) noexcept
+      : maxDistance{maxDistance}, maxError{maxError} {}
+
+  [[nodiscard]] constexpr float NearError(float error) const noexcept {
+    return math::Nearness(error, maxError);
+  }
+
+  [[nodiscard]] constexpr float NearRange(float distance) const noexcept {
+    return math::Nearness(distance, maxDistance);
+  }
+
+  float maxDistance;
+  float maxError;
+};
+
+struct Weights {
+  constexpr Weights(float aim, float distance, float priority,
+                    float reach) noexcept
+      : aim{aim}, distance{distance}, priority{priority}, reach{reach} {}
+
+  float aim;
+  float distance;
+  float priority;
+  float reach;
+};
+
+struct Choice {
+  constexpr Choice(const Limits& limits, const Weights& weights) noexcept
+      : limits{limits}, weights{weights} {}
+
+  Limits limits;
+  Weights weights;
 };
 
 [[nodiscard]] math::Vec3 AimPoint(
     const games::fc3::EntityInfo& entity) noexcept;
 
-struct Weights {
-  float aim{1.0F};
-  float distance{};
-  float priority{};
-  float reach{};
-};
-
-struct Choice {
-  Limits limits{};
-  Weights weights{};
-};
-
-[[nodiscard]] constexpr float Nearness(float value, float worst) noexcept {
-  return worst > 0.0F ? 1.0F - (value / worst) : 0.0F;
-}
-
-template <typename Rank>
-[[nodiscard]] std::optional<Target> Considered(
-    const games::fc3::EntityInfo& entity, const math::Vec3& eye,
-    const math::Vec3& forward, const Limits& limits, Rank rank) noexcept {
-  const std::optional<Ranking> kRanking{rank(entity)};
-  if (!kRanking) {
-    return std::nullopt;
-  }
-
-  const math::Vec3 kPoint{AimPoint(entity)};
-  const math::Vec3 kOffset{kPoint - eye};
-  const float kDistance{kOffset.Length()};
-  if (kDistance > limits.maxDistance) {
-    return std::nullopt;
-  }
-
-  const float kError{math::AngleBetween(forward, kOffset)};
-  if (kError > limits.maxError) {
-    return std::nullopt;
-  }
-
-  return Target{.entity = entity.address,
-                .point = kPoint,
-                .error = kError,
-                .distance = kDistance,
-                .priority = kRanking->priority,
-                .reach = kRanking->reach};
-}
+[[nodiscard]] std::optional<Target> CandidateOf(
+    const games::fc3::EntityInfo& entity, const math::Ray& view,
+    const Limits& limits, RankFn rank,
+    const games::fc3::PawnInfo* self) noexcept;
 
 [[nodiscard]] inline float ScoreOf(const Choice& choice,
                                    const Target& target) noexcept {
-  return (choice.weights.aim * Nearness(target.error, choice.limits.maxError)) +
-         (choice.weights.distance *
-          Nearness(target.distance, choice.limits.maxDistance)) +
-         (choice.weights.priority * target.priority) +
-         (choice.weights.reach * target.reach);
+  const Weights& kWeights{choice.weights};
+  const Limits& kLimits{choice.limits};
+
+  // clang-format off
+  return (kWeights.aim      * kLimits.NearError(target.error))
+       + (kWeights.distance * kLimits.NearRange(target.distance))
+       + (kWeights.priority * target.priority)
+       + (kWeights.reach    * target.reach);
+  // clang-format on
 }
 
-template <typename Rank>
 [[nodiscard]] std::optional<Target> ChooseTarget(
-    const games::fc3::EntitySnapshot& snapshot, const math::Vec3& eye,
-    const math::Vec3& forward, const Choice& choice, Rank rank) noexcept {
-  std::optional<Target> best;
-  float bestScore{};
-
-  for (const games::fc3::EntityInfo& kEntity : games::fc3::Entities(snapshot)) {
-    const std::optional<Target> kCandidate{
-        Considered(kEntity, eye, forward, choice.limits, rank)};
-    if (!kCandidate) {
-      continue;
-    }
-
-    const float kScore{ScoreOf(choice, *kCandidate)};
-    if (best && bestScore >= kScore) {
-      continue;
-    }
-
-    bestScore = kScore;
-    best = kCandidate;
-  }
-
-  return best;
-}
+    const games::fc3::EntitySnapshot& snapshot, const math::Ray& view,
+    const Choice& choice, RankFn rank,
+    const games::fc3::PawnInfo* self) noexcept;
 
 }  // namespace afw::aimbot

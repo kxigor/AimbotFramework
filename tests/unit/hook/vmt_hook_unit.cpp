@@ -100,7 +100,8 @@ TEST_F(VmtHookUnit, CreateRejectsAnUnreadableSlot) {
 
 TEST_F(VmtHookUnit, CreateDynamicPublishesTheSameOriginalOnTheHeap) {
   const std::expected<std::unique_ptr<afw::hook::VmtHook>, std::error_code>
-      kHook{afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{table_}, kSlot)};
+      kHook{
+          afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{table_}, kSlot)};
 
   ASSERT_TRUE(kHook.has_value()) << kHook.error().message();
   ASSERT_NE(kHook->get(), nullptr);
@@ -126,8 +127,8 @@ TEST_F(VmtHookUnit, CreateDynamicRejectsAnUnreadableSlotTheSameWay) {
   }
 
   const std::expected<std::unique_ptr<afw::hook::VmtHook>, std::error_code>
-      kHook{
-          afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{unmapped}, kSlot)};
+      kHook{afw::hook::VmtHook::CreateDynamic(afw::hook::Vtable{unmapped},
+                                              kSlot)};
 
   ASSERT_FALSE(kHook.has_value());
   EXPECT_EQ(kHook.error(),

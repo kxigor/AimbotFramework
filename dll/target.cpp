@@ -4,6 +4,7 @@
 #include <afw/games/fc3/internal/kind.hpp>
 #include <afw/math/angle.hpp>
 #include <afw/math/direction.hpp>
+#include <afw/math/ray.hpp>
 #include <afw/math/vec3.hpp>
 #include <cstdint>
 #include <expected>
@@ -57,24 +58,30 @@ namespace {
   const config::Settings& kSettings{config::Current()};
 
   return aimbot::Choice{
-      .limits = {.maxDistance = kSettings.aimRange.load(),
-                 .maxError = math::HalfAngle(kSettings.aimConeDegrees.load())},
-      .weights = {.aim = kSettings.aimWeightAim.load(),
-                  .distance = kSettings.aimWeightDistance.load(),
-                  .priority = kSettings.aimWeightPriority.load(),
-                  .reach = kSettings.aimWeightReach.load()}};
+      aimbot::Limits{
+          /*maxDistance = */ kSettings.aimRange.load(),
+          /*maxError    = */ math::HalfAngle(kSettings.aimConeDegrees.load())},
+      aimbot::Weights{/*aim      = */ kSettings.aimWeightAim.load(),
+                      /*distance = */ kSettings.aimWeightDistance.load(),
+                      /*priority = */ kSettings.aimWeightPriority.load(),
+                      /*reach    = */ kSettings.aimWeightReach.load()}};
 }
 
-[[nodiscard]] auto RankAgainst(const games::fc3::PawnInfo* self) noexcept {
-  return [self](const games::fc3::EntityInfo& entity) {
-    const std::optional<float> kPriority{PriorityOf(entity, self)};
-    if (!kPriority) {
-      return std::optional<aimbot::Ranking>{};
-    }
+[[nodiscard]] std::optional<aimbot::Ranking> RankAgainstSettings(
+    const games::fc3::EntityInfo& entity,
+    const games::fc3::PawnInfo* self) noexcept {
+  const std::optional<float> kPriority{PriorityOf(entity, self)};
+  if (!kPriority) {
+    return std::nullopt;
+  }
 
-    return std::optional<aimbot::Ranking>{aimbot::Ranking{
-        .priority = *kPriority, .reach = games::fc3::ReachOf(entity.address)}};
-  };
+  return std::optional<aimbot::Ranking>{
+      aimbot::Ranking{/*priority = */ *kPriority,
+                      /*reach    = */ games::fc3::ReachOf(entity.address)}};
+}
+
+[[nodiscard]] math::Ray ViewOf(const games::fc3::CameraBasis& camera) noexcept {
+  return math::Ray{.origin = camera.position, .direction = camera.forward};
 }
 
 }  // namespace
@@ -91,9 +98,9 @@ std::optional<float> PriorityOf(const games::fc3::EntityInfo& entity,
 std::optional<aimbot::Target> Pick(
     const games::fc3::EntitySnapshot& snapshot,
     const games::fc3::CameraBasis& camera) noexcept {
-  return aimbot::ChooseTarget(snapshot, camera.position, camera.forward,
-                              ChoiceFromSettings(),
-                              RankAgainst(games::fc3::FindSelf(snapshot)));
+  return aimbot::ChooseTarget(snapshot, ViewOf(camera), ChoiceFromSettings(),
+                              &RankAgainstSettings,
+                              games::fc3::FindSelf(snapshot));
 }
 
 std::uintptr_t CameraState(const games::fc3::EntitySnapshot& snapshot,
@@ -129,12 +136,13 @@ void UpdateReach() noexcept {
   }
 
   const games::fc3::EntitySnapshot& kSnapshot{games::fc3::LastSnapshot()};
-  const auto kRank{RankAgainst(games::fc3::FindSelf(kSnapshot))};
+  const games::fc3::PawnInfo* const kSelf{games::fc3::FindSelf(kSnapshot)};
+  const math::Ray kView{ViewOf(*kCamera)};
 
   for (const games::fc3::EntityInfo& kEntity :
        games::fc3::Entities(kSnapshot)) {
-    const std::optional<aimbot::Target> kCandidate{aimbot::Considered(
-        kEntity, kCamera->position, kCamera->forward, kChoice.limits, kRank)};
+    const std::optional<aimbot::Target> kCandidate{aimbot::CandidateOf(
+        kEntity, kView, kChoice.limits, &RankAgainstSettings, kSelf)};
     if (!kCandidate) {
       continue;
     }
