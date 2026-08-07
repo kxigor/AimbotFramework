@@ -234,7 +234,7 @@ TEST_F(AimbotChoice, AShotThatCannotGetThereLosesToOneThatCan) {
 
   ASSERT_TRUE(kTarget.has_value());
   EXPECT_EQ(kTarget->entity, 0xBU);
-  EXPECT_FLOAT_EQ(kTarget->reach, 1.0F);
+  EXPECT_FLOAT_EQ(kTarget->ranking.reach, 1.0F);
 }
 
 // And the weight has to be what decides it: with reach unweighted the same two

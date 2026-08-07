@@ -19,7 +19,7 @@ math::Vec3 AimPoint(const games::fc3::EntityInfo& entity) noexcept {
 }
 
 std::optional<Target> CandidateOf(const games::fc3::EntityInfo& entity,
-                                  const math::Ray& view, const Limits& limits,
+                                  const math::Ray& view, const Choice& choice,
                                   RankFn rank,
                                   const games::fc3::PawnInfo* self) noexcept {
   const std::optional<Ranking> kRanking{rank(entity, self)};
@@ -30,12 +30,12 @@ std::optional<Target> CandidateOf(const games::fc3::EntityInfo& entity,
   const math::Vec3 kPoint{AimPoint(entity)};
   const math::Vec3 kOffset{kPoint - view.origin};
   const float kDistance{kOffset.Length()};
-  if (kDistance > limits.maxDistance) {
+  if (!choice.InRange(kDistance)) {
     return std::nullopt;
   }
 
   const float kError{math::AngleBetween(view.direction, kOffset)};
-  if (kError > limits.maxError) {
+  if (!choice.InCone(kError)) {
     return std::nullopt;
   }
 
@@ -43,8 +43,7 @@ std::optional<Target> CandidateOf(const games::fc3::EntityInfo& entity,
                 /*point    = */ kPoint,
                 /*error    = */ kError,
                 /*distance = */ kDistance,
-                /*priority = */ kRanking->priority,
-                /*reach    = */ kRanking->reach};
+                /*ranking  = */ *kRanking};
 }
 
 std::optional<Target> ChooseTarget(const games::fc3::EntitySnapshot& snapshot,
@@ -56,12 +55,12 @@ std::optional<Target> ChooseTarget(const games::fc3::EntitySnapshot& snapshot,
 
   for (const games::fc3::EntityInfo& kEntity : games::fc3::Entities(snapshot)) {
     const std::optional<Target> kCandidate{
-        CandidateOf(kEntity, view, choice.limits, rank, self)};
+        CandidateOf(kEntity, view, choice, rank, self)};
     if (!kCandidate) {
       continue;
     }
 
-    const float kScore{ScoreOf(choice, *kCandidate)};
+    const float kScore{choice.ScoreOf(*kCandidate)};
     if (best && bestScore >= kScore) {
       continue;
     }

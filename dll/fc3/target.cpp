@@ -125,7 +125,7 @@ void UpdateReach() noexcept {
   ++frames;
 
   const aimbot::Choice kChoice{ChoiceFromSettings()};
-  if (kChoice.weights.reach <= 0.0F) {
+  if (!kChoice.WantsReach()) {
     return;
   }
 
@@ -142,7 +142,7 @@ void UpdateReach() noexcept {
   for (const games::fc3::EntityInfo& kEntity :
        games::fc3::Entities(kSnapshot)) {
     const std::optional<aimbot::Target> kCandidate{aimbot::CandidateOf(
-        kEntity, kView, kChoice.limits, &RankAgainstSettings, kSelf)};
+        kEntity, kView, kChoice, &RankAgainstSettings, kSelf)};
     if (!kCandidate) {
       continue;
     }
