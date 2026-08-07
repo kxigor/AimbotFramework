@@ -13,6 +13,12 @@
 # is OpenGL, Q2RTX is Vulkan) needs a sibling directory implementing the same
 # neutral surface; ImGui draw lists, and therefore afw::esp and afw::menu, are
 # backend-independent and would not change.
+#
+# render/overlay.hpp carries no .cpp of its own on purpose: it states what a
+# backend must provide, the way app/game.hpp and hook/hook.hpp state what a
+# title and a hook must provide. Each source below does pair with the header
+# beside it, so the layout rule holds -- dxgi/overlay.cpp answers both its own
+# dxgi/overlay.hpp and the neutral surface.
 
 add_library(afw_render STATIC
   dxgi/probe.cpp

@@ -6,7 +6,7 @@
 #include <windows.h>
 
 #include <afw/core/cast.hpp>
-#include <afw/render/dxgi/present_hook.hpp>
+#include <afw/render/dxgi/overlay.hpp>
 #include <afw/render/overlay.hpp>
 #include <afw/win/com_ptr.hpp>
 #include <array>

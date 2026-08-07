@@ -13,6 +13,7 @@
 #include <afw/hook/vtable.hpp>
 #include <afw/hook/wnd_proc_hook.hpp>
 #include <afw/menu/menu.hpp>
+#include <afw/render/dxgi/overlay.hpp>
 #include <afw/render/dxgi/present_hook.hpp>
 #include <afw/render/dxgi/probe.hpp>
 #include <afw/render/overlay.hpp>

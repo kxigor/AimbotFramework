@@ -3,9 +3,6 @@
 #include <windows.h>
 
 #include <afw/hook/hook.hpp>
-#include <afw/render/overlay.hpp>
-#include <expected>
-#include <system_error>
 
 struct IDXGISwapChain;
 
@@ -27,8 +24,5 @@ class PresentBinding {
 };
 
 [[nodiscard]] PresentFn OriginalPresent() noexcept;
-
-[[nodiscard]] std::expected<void, std::error_code> DrawOverlayFrame(
-    IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept;
 
 }  // namespace afw::render::dxgi
