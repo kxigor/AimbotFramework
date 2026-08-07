@@ -5,11 +5,11 @@
 #include <expected>
 #include <system_error>
 
-namespace afw::render {
+namespace afw::render::dxgi {
 
 constexpr std::size_t kPresentSlot{8};
 
 [[nodiscard]] std::expected<hook::Vtable, std::error_code>
 ProbeSwapChainVtable() noexcept;
 
-}  // namespace afw::render
+}  // namespace afw::render::dxgi

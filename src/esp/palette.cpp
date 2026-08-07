@@ -55,16 +55,16 @@ bool Shown(Kind kind) noexcept {
     case Kind::Enemy:
       return kSettings.espEnemies.load();
     case Kind::Ally:
-      return kSettings.espAllies.load();
+      return kSettings.fc3.espAllies.load();
     case Kind::Civilian:
-      return kSettings.espCivilians.load();
+      return kSettings.fc3.espCivilians.load();
     case Kind::Predator:
     case Kind::Animal:
-      return kSettings.espAnimals.load();
+      return kSettings.fc3.espAnimals.load();
     case Kind::Bird:
-      return kSettings.espBirds.load();
+      return kSettings.fc3.espBirds.load();
     case Kind::Vehicle:
-      return kSettings.espVehicles.load();
+      return kSettings.fc3.espVehicles.load();
     case Kind::Prop:
       return kSettings.espProps.load();
     case Kind::Self:

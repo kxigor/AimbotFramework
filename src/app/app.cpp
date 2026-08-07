@@ -13,9 +13,9 @@
 #include <afw/hook/vtable.hpp>
 #include <afw/hook/wnd_proc_hook.hpp>
 #include <afw/menu/menu.hpp>
+#include <afw/render/dxgi/present_hook.hpp>
+#include <afw/render/dxgi/probe.hpp>
 #include <afw/render/overlay.hpp>
-#include <afw/render/present_hook.hpp>
-#include <afw/render/render.hpp>
 #include <afw/win/scoped_handle.hpp>
 #include <array>
 #include <atomic>
@@ -100,7 +100,7 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
   const DetourGuard kInside{};
 
   const std::expected<void, std::error_code> kDrawn{
-      render::DrawOverlayFrame(swapChain, &DrawOverlay)};
+      render::dxgi::DrawOverlayFrame(swapChain, &DrawOverlay)};
   if (!kDrawn) {
     static bool reported{false};
     if (!reported) {
@@ -114,7 +114,7 @@ HRESULT __stdcall PresentDetour(IDXGISwapChain* swapChain, UINT syncInterval,
         /*hEvent = */ UnloadEvent());
   }
 
-  render::PresentFn original{render::OriginalPresent()};
+  render::dxgi::PresentFn original{render::dxgi::OriginalPresent()};
   if (original == nullptr) {
     return E_FAIL;
   }
@@ -128,7 +128,8 @@ void LogAttached(const Game& game) {
 
 void LogTable(const hook::Vtable& table) {
   Logf("[aimbot] vtable at %p, Present at %p\n",
-       static_cast<const void*>(table.Get()), table.At(render::kPresentSlot));
+       static_cast<const void*>(table.Get()),
+       table.At(render::dxgi::kPresentSlot));
 }
 
 void RunUntilUnload() {
@@ -165,7 +166,7 @@ void AddInputHook(ScopedHooks& hooks) {
 
 void RunSession(Game& game) {
   const std::expected<hook::Vtable, std::error_code> kTable{
-      render::ProbeSwapChainVtable()};
+      render::dxgi::ProbeSwapChainVtable()};
   if (!kTable) {
     LogFailure("probing the swap chain vtable", kTable.error());
     return;
@@ -173,8 +174,8 @@ void RunSession(Game& game) {
   LogTable(*kTable);
 
   ScopedHooks hooks;
-  if (!hooks.Add<render::PresentBinding>(
-          hook::VmtHook::CreateDynamic(*kTable, render::kPresentSlot),
+  if (!hooks.Add<render::dxgi::PresentBinding>(
+          hook::VmtHook::CreateDynamic(*kTable, render::dxgi::kPresentSlot),
           &PresentDetour, "Present")) {
     return;
   }

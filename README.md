@@ -4,7 +4,7 @@ A personal C++23 project for learning the Windows API, reverse-engineering and
 3D geometry, using a single-player copy of **Far Cry 3** (Dunia engine) as the
 subject.
 
-The pipeline works end to end: `injector.exe` loads `aimbot.dll` into the running
+The pipeline works end to end: `injector.exe` loads `aimbot_fc3.dll` into the running
 game, the DLL hooks `IDXGISwapChain::Present` and the engine's per-frame entity
 walk, draws an ImGui overlay over the frame, reads the game's live camera and
 projects world entities into screen boxes. On top of that sits the aim assist —
@@ -67,13 +67,19 @@ Implemented:
   number lifted out of a decompiler would not.
 - **`afw::render`** — obtains the swap chain vtable from a throwaway WARP probe,
   owns the `Present` binding, and draws the ImGui overlay, offering its users a
-  per-frame callback.
+  per-frame callback. Only `render/overlay.hpp` is graphics-API neutral — the
+  callback, the overlay window, the back buffer size. Everything that names
+  `IDXGISwapChain` sits under `render/dxgi/` in `afw::render::dxgi`, and that is
+  the whole implementation today. A title on another API needs a sibling backend
+  there; ImGui draw lists are backend-independent, so nothing above it changes.
 - **`afw::esp`** — what the overlay draws over the frame: entity boxes, aim
   cubes, the assist cone, and a diagnostics panel showing every address, offset
-  and matrix input in play. Its public surface is one function, `DrawFrame()`;
-  the projection it draws with belongs to `afw::math` and the classification it
-  colours by belongs to the game, so what is left here is presentation and
-  nothing else.
+  and matrix input in play. Its public surface is one function, `DrawFrame()`,
+  and the projection it draws with belongs to `afw::math` — but it is **not**
+  title-neutral: it links `afw::games::fc3` and names `EntityInfo`, `Kind`,
+  `CameraBasis` and `Diagnostics` in its own `internal/` headers. It reads more
+  of an entity than the aimbot does, so it is the harder of the two to lift off
+  a title.
 - **`afw::games::fc3`** — Far Cry 3 bindings: the pointer chain to the live
   camera, its basis and field of view, the render viewport, and the per-frame
   walk over the engine's entity update groups. Every step is a checked read, and
@@ -125,8 +131,10 @@ Implemented:
   detour drain and the self-unload. `ScopedHooks` owns everything installed and
   takes it back off in reverse at scope exit; a title plugs in through
   `afw::app::Game` — its own hooks and its own per-frame drawing — and that is
-  the seam a second title reuses unchanged.
-- **`injector.exe`** / **`aimbot.dll`** — the working pair, verified in the game.
+  the seam a second title reuses unchanged. It carries no knowledge of a title,
+  but it does install the frame hook itself through `afw::render::dxgi`, so it
+  is bound to that backend even though it is free of the game.
+- **`injector.exe`** / **`aimbot_fc3.dll`** — the working pair, verified in the game.
   The DLL is 30 lines: an entry point that starts a thread and hands one `Game`
   to `afw::app::Run`.
 
@@ -209,7 +217,7 @@ does not inherit.
 graph TD
   subgraph entry [entry points]
     INJ[injector.exe]
-    DLL[aimbot.dll]
+    DLL[aimbot_fc3.dll]
   end
 
   DLL -.-> APP[afw::app]
@@ -478,27 +486,30 @@ third_party/
 docs/
   images/               screenshots referenced from this file
 include/afw/            public headers (sibling of src/)
-  win/ remote/ hook/ process/ render/ esp/ menu/ app/ config/ math/ aimbot/
+  win/ remote/ hook/ process/ esp/ menu/ app/ config/ math/ aimbot/
+  render/               overlay.hpp is API-neutral; dxgi/ is Direct3D 11
   games/fc3/                                                       implemented
   games/doom3/ games/q2rtx/                                          skeleton
 src/
-  win/ remote/ hook/ process/ render/ esp/ menu/ app/ aimbot/ games/fc3/
+  win/ remote/ hook/ process/ esp/ menu/ app/ aimbot/ games/fc3/
                                           STATIC, Windows-only
+  render/ render/dxgi/                    STATIC, Windows-only, D3D11 backend
   config/ math/                           STATIC, platform-agnostic
   games/doom3/ games/q2rtx/               STATIC, skeleton
 injector/
-  injector.cpp          injector.exe -> loads aimbot.dll via afw::remote
-dll/
-  dllmain.cpp           entry point -> starts a thread, hands one Game to
+  injector.cpp          injector.exe -> loads aimbot_fc3.dll via afw::remote
+dll/                    one shim per title; a title is added beside fc3/
+  fc3/
+    dllmain.cpp         entry point -> starts a thread, hands one Game to
                         afw::app::Run, and nothing else
-  farcry3.cpp/.hpp      the Far Cry 3 Game: the entity-walk detour and the two
+    farcry3.cpp/.hpp    the Far Cry 3 Game: the entity-walk detour and the two
                         callbacks, and nothing else
-  internal.hpp          what the shim's own translation units share
-  target.cpp            who to shoot: priority per kind, the weighted pick, the
+    internal.hpp        what the shim's own translation units share
+    target.cpp          who to shoot: priority per kind, the weighted pick, the
                         camera state, the reachability queries
-  assist.cpp            how to point at them: view steering and auto-fire
-  steady.cpp            which weapon patches are held
-  probe.cpp             the trace probe and the status line
+    assist.cpp          how to point at them: view steering and auto-fire
+    steady.cpp          which weapon patches are held
+    probe.cpp           the trace probe and the status line
 tests/                  GTest + CTest wiring
   scripts/              check_format.py / check_tidy.py (no bash dependency)
 ```
@@ -529,7 +540,7 @@ libraries built on it (`games::*`, `aimbot`) are added only under `WIN32`;
 ## Target architecture
 
 Far Cry 3's Direct3D 11 executable (`bin/farcry3_d3d11.exe`) is **32-bit**, and a
-64-bit DLL cannot be loaded into a 32-bit process. `aimbot.dll` and
+64-bit DLL cannot be loaded into a 32-bit process. `aimbot_fc3.dll` and
 `injector.exe` therefore have to be built for x86 with an `i686-w64-mingw32`
 toolchain (MSYS2 **MINGW32**); the library code itself is unaffected, and the
 whole test suite passes on both architectures.
@@ -562,7 +573,7 @@ cmake --preset dev-debug
 cmake --build --preset dev-debug
 ctest --preset dev-debug
 
-# release DLL only -> build/ci-release/dll/aimbot.dll
+# release DLL only -> build/ci-release/dll/fc3/aimbot_fc3.dll
 cmake --preset ci-release
 cmake --build --preset ci-release
 ```
@@ -612,7 +623,7 @@ running them twice would only cost time. The vendored ImGui is outside their fil
 globs and does not link `project_options`: the warning set is tuned for our own
 code.
 
-`aimbot.dll` is staged next to `injector.exe` by a build target of its own rather
+`aimbot_fc3.dll` is staged next to `injector.exe` by a build target of its own rather
 than a `POST_BUILD` step, because a `POST_BUILD` command only runs when its own
 target is relinked — a change confined to the DLL used to leave a stale copy
 staged.
@@ -625,7 +636,7 @@ engine module and roughly 190 MB of display driver. Past about 20 MB the remote
 `LoadLibraryW` starts returning NULL, which surfaces as the injector reporting a
 missing module or a dependency failure rather than as anything about size.
 
-The DLL output is `aimbot.dll` (no `lib` prefix), with the MinGW runtime linked
+The DLL output is `aimbot_fc3.dll` (no `lib` prefix), with the MinGW runtime linked
 statically so it does not need MSYS2 runtime DLLs on the host's search path, and
 PE hardening enabled (`--dynamicbase --nxcompat --high-entropy-va`).
 
@@ -656,7 +667,7 @@ the camera basis, both fields of view, the entity census and the projected marke
 positions — it is the first place to look when a box lands somewhere wrong, and
 the reason the calibration markers in the screenshot exist.
 
-The DLL also writes `aimbot.dll.log` next to itself — the injection steps, then a
+The DLL also writes `aimbot_fc3.dll.log` next to itself — the injection steps, then a
 status line every 1800 frames.
 
 Patches deserve one warning of their own. They are byte writes over the game's
@@ -701,7 +712,7 @@ place each so they cannot be got wrong again:
 | `dev-debug-ubsan`   | Debug          | UBSan, forces `clang++`                |
 | `ci-coverage`       | Debug          | gcov instrumentation                   |
 | `ci-relwithdebinfo` | RelWithDebInfo | tests on                               |
-| `ci-release`        | Release        | `aimbot.dll` only, tests off           |
+| `ci-release`        | Release        | `aimbot_fc3.dll` only, tests off           |
 
 32-bit, from MINGW32 — these are the ones that run in the game:
 
@@ -725,7 +736,7 @@ and switches the lint gate off, so a new 32-bit preset cannot forget either.
 
 | Option                   | Default            | Meaning                          |
 |--------------------------|--------------------|----------------------------------|
-| `AFW_BUILD_DLL`          | ON (top-level+Win) | build `aimbot.dll`               |
+| `AFW_BUILD_DLL`          | ON (top-level+Win) | build `aimbot_fc3.dll`               |
 | `AFW_BUILD_INJECTOR`     | ON (top-level+Win) | build `injector.exe`             |
 | `AFW_BUILD_TESTS`        | ON (top-level)     | build the GTest suite            |
 | `AFW_ENABLE_FORMAT_CHECK`| ON (top-level)     | register clang-format as a test  |

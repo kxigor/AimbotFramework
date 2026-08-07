@@ -37,14 +37,14 @@ namespace {
                     kSettings.aimPriorityEnemies.load());
     case Kind::Predator:
     case Kind::Animal:
-      return Ranked(kSettings.aimAnimals.load(),
-                    kSettings.aimPriorityAnimals.load());
+      return Ranked(kSettings.fc3.aimAnimals.load(),
+                    kSettings.fc3.aimPriorityAnimals.load());
     case Kind::Bird:
-      return Ranked(kSettings.aimBirds.load(),
-                    kSettings.aimPriorityBirds.load());
+      return Ranked(kSettings.fc3.aimBirds.load(),
+                    kSettings.fc3.aimPriorityBirds.load());
     case Kind::Vehicle:
-      return Ranked(kSettings.aimVehicles.load(),
-                    kSettings.aimPriorityVehicles.load());
+      return Ranked(kSettings.fc3.aimVehicles.load(),
+                    kSettings.fc3.aimPriorityVehicles.load());
     case Kind::Self:
     case Kind::Ally:
     case Kind::Civilian:

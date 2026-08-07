@@ -3,8 +3,8 @@
 
 #include <afw/hook/vmt_hook.hpp>
 #include <afw/hook/vtable.hpp>
-#include <afw/render/present_hook.hpp>
-#include <afw/render/render.hpp>
+#include <afw/render/dxgi/present_hook.hpp>
+#include <afw/render/dxgi/probe.hpp>
 #include <array>
 #include <bit>
 #include <expected>
@@ -25,7 +25,7 @@ HRESULT __stdcall FakeDetour(IDXGISwapChain* swapChain, UINT syncInterval,
                              UINT flags) {
   ++detourCalls;
 
-  afw::render::PresentFn original{afw::render::OriginalPresent()};
+  afw::render::dxgi::PresentFn original{afw::render::dxgi::OriginalPresent()};
   if (original == nullptr) {
     return E_FAIL;
   }
@@ -38,7 +38,8 @@ class PresentHookUnit : public ::testing::Test {
   void SetUp() override {
     detourCalls = 0;
     entries_.fill(nullptr);
-    entries_[afw::render::kPresentSlot] = std::bit_cast<void*>(&FakeOriginal);
+    entries_[afw::render::dxgi::kPresentSlot] =
+        std::bit_cast<void*>(&FakeOriginal);
   }
 
   [[nodiscard]] afw::hook::Vtable Table() {
@@ -46,8 +47,8 @@ class PresentHookUnit : public ::testing::Test {
   }
 
   [[nodiscard]] HRESULT CallPresentSlot() {
-    return std::bit_cast<afw::render::PresentFn>(
-        entries_[afw::render::kPresentSlot])(nullptr, 0, 0);
+    return std::bit_cast<afw::render::dxgi::PresentFn>(
+        entries_[afw::render::dxgi::kPresentSlot])(nullptr, 0, 0);
   }
 
   std::array<void*, kEntries> entries_{};
@@ -56,39 +57,39 @@ class PresentHookUnit : public ::testing::Test {
 }  // namespace
 
 TEST_F(PresentHookUnit, OriginalPresentIsNullWithoutABinding) {
-  EXPECT_EQ(afw::render::OriginalPresent(), nullptr);
+  EXPECT_EQ(afw::render::dxgi::OriginalPresent(), nullptr);
 }
 
 TEST_F(PresentHookUnit, BindingPublishesTheOriginal) {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
-      afw::hook::VmtHook::Create(Table(), afw::render::kPresentSlot)};
+      afw::hook::VmtHook::Create(Table(), afw::render::dxgi::kPresentSlot)};
   ASSERT_TRUE(hook.has_value()) << hook.error().message();
 
-  const afw::render::PresentBinding kBound{*hook};
+  const afw::render::dxgi::PresentBinding kBound{*hook};
 
-  EXPECT_EQ(afw::render::OriginalPresent(), &FakeOriginal);
+  EXPECT_EQ(afw::render::dxgi::OriginalPresent(), &FakeOriginal);
 }
 
 TEST_F(PresentHookUnit, DestroyingTheBindingClearsIt) {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
-      afw::hook::VmtHook::Create(Table(), afw::render::kPresentSlot)};
+      afw::hook::VmtHook::Create(Table(), afw::render::dxgi::kPresentSlot)};
   ASSERT_TRUE(hook.has_value()) << hook.error().message();
 
   {
-    const afw::render::PresentBinding kBound{*hook};
-    ASSERT_EQ(afw::render::OriginalPresent(), &FakeOriginal);
+    const afw::render::dxgi::PresentBinding kBound{*hook};
+    ASSERT_EQ(afw::render::dxgi::OriginalPresent(), &FakeOriginal);
   }
 
-  EXPECT_EQ(afw::render::OriginalPresent(), nullptr);
+  EXPECT_EQ(afw::render::dxgi::OriginalPresent(), nullptr);
 }
 
 TEST_F(PresentHookUnit, TheDetourReachesTheOriginalThroughTheBinding) {
   std::expected<afw::hook::VmtHook, std::error_code> hook{
-      afw::hook::VmtHook::Create(Table(), afw::render::kPresentSlot)};
+      afw::hook::VmtHook::Create(Table(), afw::render::dxgi::kPresentSlot)};
   ASSERT_TRUE(hook.has_value()) << hook.error().message();
   ASSERT_TRUE(hook->SetDetour(&FakeDetour).has_value());
 
-  const afw::render::PresentBinding kBound{*hook};
+  const afw::render::dxgi::PresentBinding kBound{*hook};
   ASSERT_TRUE(hook->Enable().has_value());
 
   EXPECT_EQ(CallPresentSlot(), S_OK);
@@ -98,18 +99,18 @@ TEST_F(PresentHookUnit, TheDetourReachesTheOriginalThroughTheBinding) {
 TEST_F(PresentHookUnit, ASecondBindingWorksAfterTheFirstIsGone) {
   for (int round{0}; round < 2; ++round) {
     std::expected<afw::hook::VmtHook, std::error_code> hook{
-        afw::hook::VmtHook::Create(Table(), afw::render::kPresentSlot)};
+        afw::hook::VmtHook::Create(Table(), afw::render::dxgi::kPresentSlot)};
     ASSERT_TRUE(hook.has_value()) << hook.error().message();
     ASSERT_TRUE(hook->SetDetour(&FakeDetour).has_value());
 
-    const afw::render::PresentBinding kBound{*hook};
+    const afw::render::dxgi::PresentBinding kBound{*hook};
     ASSERT_TRUE(hook->Enable().has_value());
 
     EXPECT_EQ(CallPresentSlot(), S_OK) << "round " << round;
   }
 
   EXPECT_EQ(detourCalls, 2);
-  EXPECT_EQ(afw::render::OriginalPresent(), nullptr);
-  EXPECT_EQ(entries_[afw::render::kPresentSlot],
+  EXPECT_EQ(afw::render::dxgi::OriginalPresent(), nullptr);
+  EXPECT_EQ(entries_[afw::render::dxgi::kPresentSlot],
             std::bit_cast<void*>(&FakeOriginal));
 }
