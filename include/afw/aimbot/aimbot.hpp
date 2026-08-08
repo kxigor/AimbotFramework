@@ -1,6 +1,7 @@
 #pragma once
 
 #include <afw/games/fc3/fc3.hpp>
+#include <afw/math/angle.hpp>
 #include <afw/math/ray.hpp>
 #include <afw/math/scale.hpp>
 #include <afw/math/vec3.hpp>
@@ -18,7 +19,7 @@ struct Ranking {
 };
 
 struct Target {
-  Target(std::uintptr_t entity, const math::Vec3& point, float error,
+  Target(std::uintptr_t entity, const math::Vec3& point, math::Angle error,
          float distance, const Ranking& ranking) noexcept
       : entity{entity},
         point{point},
@@ -28,7 +29,7 @@ struct Target {
 
   std::uintptr_t entity;
   math::Vec3 point;
-  float error;
+  math::Angle error;
   float distance;
   Ranking ranking;
 };
@@ -39,19 +40,19 @@ using RankFn =
 
 class Limits {
  public:
-  constexpr Limits(float maxDistance, float maxError) noexcept
+  constexpr Limits(float maxDistance, math::Angle maxError) noexcept
       : maxDistance_{maxDistance}, maxError_{maxError} {}
 
   [[nodiscard]] constexpr bool InRange(float distance) const noexcept {
     return distance <= maxDistance_;
   }
 
-  [[nodiscard]] constexpr bool InCone(float error) const noexcept {
+  [[nodiscard]] constexpr bool InCone(math::Angle error) const noexcept {
     return error <= maxError_;
   }
 
-  [[nodiscard]] constexpr float NearError(float error) const noexcept {
-    return math::Nearness(error, maxError_);
+  [[nodiscard]] constexpr float NearError(math::Angle error) const noexcept {
+    return math::Nearness(error.radians, maxError_.radians);
   }
 
   [[nodiscard]] constexpr float NearRange(float distance) const noexcept {
@@ -60,7 +61,7 @@ class Limits {
 
  private:
   float maxDistance_;
-  float maxError_;
+  math::Angle maxError_;
 };
 
 class Weights {
@@ -73,13 +74,15 @@ class Weights {
     return reach_ > 0.0F;
   }
 
-  [[nodiscard]] constexpr float Applied(float nearError, float nearRange,
-                                        const Ranking& ranking) const noexcept {
+  [[nodiscard]] constexpr float Applied(const Limits& limits,
+                                        const Target& target) const noexcept {
+    const Ranking& kRanking{target.ranking};
+
     // clang-format off
-    return (aim_      * nearError)
-         + (distance_ * nearRange)
-         + (priority_ * ranking.priority)
-         + (reach_    * ranking.reach);
+    return (aim_      * limits.NearError(target.error))
+         + (distance_ * limits.NearRange(target.distance))
+         + (priority_ * kRanking.priority)
+         + (reach_    * kRanking.reach);
     // clang-format on
   }
 
@@ -99,7 +102,7 @@ class Choice {
     return limits_.InRange(distance);
   }
 
-  [[nodiscard]] constexpr bool InCone(float error) const noexcept {
+  [[nodiscard]] constexpr bool InCone(math::Angle error) const noexcept {
     return limits_.InCone(error);
   }
 
@@ -108,8 +111,7 @@ class Choice {
   }
 
   [[nodiscard]] constexpr float ScoreOf(const Target& target) const noexcept {
-    return weights_.Applied(limits_.NearError(target.error),
-                            limits_.NearRange(target.distance), target.ranking);
+    return weights_.Applied(limits_, target);
   }
 
  private:

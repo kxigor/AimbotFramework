@@ -58,9 +58,9 @@ namespace {
   const config::Settings& kSettings{config::Current()};
 
   return aimbot::Choice{
-      aimbot::Limits{
-          /*maxDistance = */ kSettings.aimRange.load(),
-          /*maxError    = */ math::HalfAngle(kSettings.aimConeDegrees.load())},
+      aimbot::Limits{/*maxDistance = */ kSettings.aimRange.load(),
+                     /*maxError    = */ math::Angle{math::HalfAngle(
+                         kSettings.aimConeDegrees.load())}},
       aimbot::Weights{/*aim      = */ kSettings.aimWeightAim.load(),
                       /*distance = */ kSettings.aimWeightDistance.load(),
                       /*priority = */ kSettings.aimWeightPriority.load(),

@@ -34,7 +34,7 @@ std::optional<Target> CandidateOf(const games::fc3::EntityInfo& entity,
     return std::nullopt;
   }
 
-  const float kError{math::AngleBetween(view.direction, kOffset)};
+  const math::Angle kError{math::AngleBetween(view.direction, kOffset)};
   if (!choice.InCone(kError)) {
     return std::nullopt;
   }

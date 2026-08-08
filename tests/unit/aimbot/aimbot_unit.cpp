@@ -17,6 +17,7 @@ using afw::aimbot::Weights;
 using afw::games::fc3::EntityInfo;
 using afw::games::fc3::EntitySnapshot;
 using afw::games::fc3::PawnInfo;
+using afw::math::Angle;
 using afw::math::Ray;
 using afw::math::Vec3;
 
@@ -47,7 +48,7 @@ constexpr Ranking kPlainRanking{/*priority = */ 0.0F, /*reach = */ 1.0F};
 }
 
 [[nodiscard]] Limits Wide() {
-  return Limits{/*maxDistance = */ 200.0F, /*maxError = */ kPi};
+  return Limits{/*maxDistance = */ 200.0F, /*maxError = */ Angle{kPi}};
 }
 
 [[nodiscard]] Weights ByAim() {
@@ -118,6 +119,23 @@ TEST(AimbotAimPoint, KeepsTheHeadWhenTheSkeletonGaveUpBoth) {
               /*reach    = */ entity.address == 0xAU ? 0.0F : 1.0F}};
 }
 
+// The score sums four terms, and the weights only mean what the menu's sliders
+// suggest while all four sit on the same 0..1 scale. Two of them are put there
+// by Limits::NearError and Limits::NearRange; the other two arrive from the
+// ranker exactly as it wrote them, and nothing checks or repairs that. Far Cry 3
+// holds the scale by accident of the user interface -- config::kMaxPriority
+// bounds the slider and ReachOf answers 0 or 1 -- which is fine for one title
+// and invisible to the author of the next. This ranker answers on a scale a
+// hundred times wider, the way a binding with its own notion of priority might.
+constexpr float kOffScalePriority{100.0F};
+
+[[nodiscard]] std::optional<Ranking> OffScaleFavourA(
+    const EntityInfo& entity, const PawnInfo* /*self*/) noexcept {
+  return std::optional<Ranking>{
+      Ranking{/*priority = */ entity.address == 0xAU ? kOffScalePriority : 0.0F,
+              /*reach    = */ 1.0F}};
+}
+
 class AimbotChoice : public ::testing::Test {
  protected:
   void Add(std::uintptr_t address, const Vec3& position) {
@@ -161,7 +179,7 @@ TEST_F(AimbotChoice, ReportsWhereItWouldAimAndHowFarOff) {
   const auto kTarget{Pick(Choice{Wide(), ByAim()}, Anyone)};
 
   ASSERT_TRUE(kTarget.has_value());
-  EXPECT_NEAR(kTarget->error, 0.0F, kTolerance);
+  EXPECT_NEAR(kTarget->error.radians, 0.0F, kTolerance);
   EXPECT_NEAR(kTarget->distance, 10.0F, kTolerance);
   EXPECT_FLOAT_EQ(kTarget->point.z, 1.6F);
 }
@@ -169,7 +187,7 @@ TEST_F(AimbotChoice, ReportsWhereItWouldAimAndHowFarOff) {
 TEST_F(AimbotChoice, LeavesAlonePeopleBeyondTheRange) {
   Add(0xA, Vec3{.x = 500.0F, .y = 0.0F, .z = 0.0F});
 
-  const Limits kNear{/*maxDistance = */ 100.0F, /*maxError = */ kPi};
+  const Limits kNear{/*maxDistance = */ 100.0F, /*maxError = */ Angle{kPi}};
 
   EXPECT_FALSE(Pick(Choice{kNear, ByAim()}, Anyone).has_value());
 }
@@ -178,7 +196,8 @@ TEST_F(AimbotChoice, LeavesAlonePeopleBeyondTheRange) {
 TEST_F(AimbotChoice, LeavesAlonePeopleOutsideTheCone) {
   Add(0xA, Vec3{.x = -10.0F, .y = 0.0F, .z = 0.0F});
 
-  const Limits kNarrow{/*maxDistance = */ 200.0F, /*maxError = */ 0.2F};
+  const Limits kNarrow{/*maxDistance = */ 200.0F,
+                       /*maxError = */ Angle{0.2F}};
 
   EXPECT_FALSE(Pick(Choice{kNarrow, ByAim()}, Anyone).has_value());
 }
@@ -223,6 +242,31 @@ TEST_F(AimbotChoice, PriorityOutweighsAimWhenItIsWorthMore) {
   EXPECT_EQ(kTarget->entity, 0xAU);
 }
 
+// Not a prohibition -- the aimbot neither checks the scale nor repairs it, and
+// the pick stays a well defined maximum either way. This records what it costs,
+// so the next binding's author meets the contract here rather than in the game.
+TEST_F(AimbotChoice, APriorityOffTheAgreedScaleOverrulesItsOwnWeight) {
+  Add(0xA, Vec3{.x = 3.0F, .y = 3.0F, .z = 0.0F});
+  Add(0xB, Vec3{.x = 40.0F, .y = 0.2F, .z = 0.0F});
+
+  // Aim is weighted a hundred times above priority, so priority can only ever
+  // break a tie -- as long as the ranker answers on the scale the weights assume.
+  const Weights kAimFirst{/*aim = */ 1.0F, /*distance = */ 0.0F,
+                          /*priority = */ 0.01F, /*reach = */ 0.0F};
+
+  const auto kInScale{Pick(Choice{Wide(), kAimFirst}, FavourA)};
+
+  ASSERT_TRUE(kInScale.has_value());
+  EXPECT_EQ(kInScale->entity, 0xBU);
+
+  // Same weights, same world, a ranker that answers 100 where the other answered
+  // 1: the term meant to break ties decides the whole thing instead.
+  const auto kOffScale{Pick(Choice{Wide(), kAimFirst}, OffScaleFavourA)};
+
+  ASSERT_TRUE(kOffScale.has_value());
+  EXPECT_EQ(kOffScale->entity, 0xAU);
+}
+
 TEST_F(AimbotChoice, AShotThatCannotGetThereLosesToOneThatCan) {
   Add(0xA, Vec3{.x = 10.0F, .y = 0.0F, .z = 0.0F});
   Add(0xB, Vec3{.x = 30.0F, .y = 6.0F, .z = 0.0F});
@@ -250,6 +294,27 @@ TEST_F(AimbotChoice, ReachIsIgnoredWhenItCarriesNoWeight) {
 
   ASSERT_TRUE(kTarget.has_value());
   EXPECT_EQ(kTarget->entity, 0xAU);
+}
+
+// WantsReach() is what the injected build asks before spending a frame's worth
+// of traces: dll::UpdateReach returns early when it answers no, and ReachOf then
+// hands every entity the 1.0F it defaults to, so the term contributes the same
+// constant to every candidate and cannot change the pick. Weights arrive from
+// sliders the menu bounds below at zero, so "carries weight" and "is positive"
+// are the same question here, and it is asked with an ordering comparison --
+// this project never tests a float for equality.
+TEST_F(AimbotChoice, AnUnweightedReachDoesNotPayForTraces) {
+  const Weights kNoReach{/*aim = */ 0.2F, /*distance = */ 0.0F,
+                         /*priority = */ 0.0F, /*reach = */ 0.0F};
+  const Choice kUnweighted{Wide(), kNoReach};
+
+  EXPECT_FALSE(kUnweighted.WantsReach());
+
+  const Weights kByReach{/*aim = */ 0.2F, /*distance = */ 0.0F,
+                         /*priority = */ 0.0F, /*reach = */ 1.0F};
+  const Choice kWanted{Wide(), kByReach};
+
+  EXPECT_TRUE(kWanted.WantsReach());
 }
 
 // Weighing nothing at all must still answer, rather than tie itself into

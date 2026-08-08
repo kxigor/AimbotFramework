@@ -24,15 +24,15 @@ namespace afw::math {
   return AnglesOf(target - from);
 }
 
-[[nodiscard]] inline float AngleBetween(const Vec3& lhs,
+[[nodiscard]] inline Angle AngleBetween(const Vec3& lhs,
                                         const Vec3& rhs) noexcept {
   const Vec3 kLeft{lhs.Normalised()};
   const Vec3 kRight{rhs.Normalised()};
   if (kLeft.Length() <= 0.0F || kRight.Length() <= 0.0F) {
-    return kHalfTurn;
+    return Angle{kHalfTurn};
   }
 
-  return std::acos(std::clamp(kLeft.Dot(kRight), -1.0F, 1.0F));
+  return Angle{std::acos(std::clamp(kLeft.Dot(kRight), -1.0F, 1.0F))};
 }
 
 }  // namespace afw::math
