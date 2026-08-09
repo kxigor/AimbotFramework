@@ -1,5 +1,6 @@
 #include <afw/games/fc3/internal/layout.hpp>
 #include <afw/games/fc3/internal/limits.hpp>
+#include <afw/games/fc3/internal/module.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/internal/structs.hpp>
 #include <afw/games/fc3/module.hpp>

@@ -4,8 +4,6 @@
 
 namespace afw::games::fc3 {
 
-[[nodiscard]] std::uintptr_t Resolve(std::uintptr_t ghidraAddress) noexcept;
-
 struct Diagnostics {
   [[nodiscard]] static Diagnostics Read() noexcept;
 

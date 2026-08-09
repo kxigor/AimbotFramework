@@ -64,11 +64,6 @@ struct CensusBuffer {
   return frames;
 }
 
-[[nodiscard]] const hook::Hook*& BoundUpdate() noexcept {
-  static const hook::Hook* hook{nullptr};
-  return hook;
-}
-
 void BeginGeneration() noexcept {
   WritingIndex() =
       ReadySlot().exchange(WritingIndex(), std::memory_order_acq_rel);
@@ -138,21 +133,6 @@ EntityCensus LastCensus() noexcept {
 
 const EntitySnapshot& LastSnapshot() noexcept {
   return Buffers().at(PublishedIndex()).snapshot;
-}
-
-UpdateBinding::UpdateBinding(const hook::Hook& hook) noexcept {
-  BoundUpdate() = &hook;
-}
-
-UpdateBinding::~UpdateBinding() { BoundUpdate() = nullptr; }
-
-RunAllGroupFn OriginalRunAllGroup() noexcept {
-  const hook::Hook* const kHook{BoundUpdate()};
-  if (kHook == nullptr) {
-    return nullptr;
-  }
-
-  return kHook->Original<RunAllGroupFn>();
 }
 
 }  // namespace afw::games::fc3
