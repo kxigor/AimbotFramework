@@ -4,13 +4,13 @@
 
 #include <afw/core/cast.hpp>
 #include <afw/hook/vtable.hpp>
-#include <afw/render/render.hpp>
+#include <afw/render/dxgi/probe.hpp>
 #include <afw/win/error.hpp>
 #include <bit>
 #include <expected>
 #include <system_error>
 
-namespace afw::render {
+namespace afw::render::dxgi {
 
 namespace {
 
@@ -127,4 +127,4 @@ std::expected<hook::Vtable, std::error_code> ProbeSwapChainVtable() noexcept {
   return kVtable;
 }
 
-}  // namespace afw::render
+}  // namespace afw::render::dxgi

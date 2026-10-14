@@ -13,8 +13,8 @@ std::string Describe(Error error) {
       return "no camera is active: the manager holds none, or the world is "
              "not loaded yet";
     case Error::CameraNotFound:
-      return "the active camera stack entry holds nothing whose vtable "
-             "matches the known camera class";
+      return "the active camera was located but one of its view fields did "
+             "not read: position, forward, up or either field of view";
     case Error::CameraNotSane:
       return "the camera was found but its basis fails the sanity check: "
              "the forward vector is not unit length, or the field of view "

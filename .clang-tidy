@@ -34,7 +34,18 @@ WarningsAsErrors: '*'
 #   -misc-use-internal-linkage : DllMain and other exported entry points must
 #      keep external linkage; the check would wrongly push them to `static`.
 #   -misc-include-cleaner : windows.h is an umbrella header, so every Win32 type
-#      (HINSTANCE, DWORD, LPVOID, ...) trips "no header directly provides X".
+#      (HINSTANCE, DWORD, LPVOID, ...) trips "no header providing X". A wrapper
+#      header carrying `// IWYU pragma: export` does NOT fix this: clang-tidy's
+#      port of include-cleaner ignores the export pragma (measured on LLVM
+#      21.1.8), unlike include-what-you-use proper. The lever that does work is
+#      the check's own IgnoreHeaders option:
+#        - key: misc-include-cleaner.IgnoreHeaders
+#          value: '.*[/\\](ucrt64|mingw32|mingw64)[/\\]include[/\\][a-zA-Z0-9_]+[.]h'
+#      With that in place the Win32 noise goes, and stdlib checking still works.
+#      What remains is 279 findings in ~60 files: this project relies on
+#      aggregate headers (fc3.hpp, layout.hpp, internal/structs.hpp) that the
+#      check refuses to credit, so turning it on means every consumer names the
+#      specific header instead. That is a design decision, not a cleanup.
 #   -misc-non-private-member-variables-in-classes : it fires on any struct that
 #      has a method, and the types read straight out of the game's memory
 #      (afw::math Vec3, Aabb, Matrix4) must stay trivially copyable aggregates

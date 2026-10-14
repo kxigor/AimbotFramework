@@ -1,6 +1,7 @@
 #include <windows.h>
 
 #include <afw/games/fc3/internal/layout.hpp>
+#include <afw/games/fc3/internal/module.hpp>
 #include <afw/games/fc3/internal/read.hpp>
 #include <afw/games/fc3/module.hpp>
 #include <afw/process/memory.hpp>

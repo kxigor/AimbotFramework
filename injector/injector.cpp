@@ -12,7 +12,7 @@
 namespace {
 
 constexpr PCWSTR kTargetImageName{L"farcry3_d3d11.exe"};
-constexpr PCWSTR kDllName{L"aimbot.dll"};
+constexpr PCWSTR kDllName{L"aimbot_fc3.dll"};
 
 [[nodiscard]] std::filesystem::path ResolveDllPath() {
   std::array<WCHAR, MAX_PATH> exePath{};

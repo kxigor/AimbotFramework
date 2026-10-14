@@ -27,24 +27,32 @@ constexpr float kDefaultAnimalPriority{0.5F};
 constexpr float kDefaultBirdPriority{0.25F};
 constexpr float kDefaultVehiclePriority{0.5F};
 
-struct Settings {
-  std::atomic<bool> espEnabled{true};
-
-  std::atomic<bool> espEnemies{true};
+struct Fc3Settings {
   std::atomic<bool> espAllies{true};
   std::atomic<bool> espCivilians{true};
   std::atomic<bool> espAnimals{true};
   std::atomic<bool> espBirds{true};
   std::atomic<bool> espVehicles{true};
+
+  std::atomic<bool> aimAnimals{false};
+  std::atomic<bool> aimBirds{false};
+  std::atomic<bool> aimVehicles{false};
+
+  std::atomic<float> aimPriorityAnimals{kDefaultAnimalPriority};
+  std::atomic<float> aimPriorityBirds{kDefaultBirdPriority};
+  std::atomic<float> aimPriorityVehicles{kDefaultVehiclePriority};
+};
+
+struct Settings {
+  std::atomic<bool> espEnabled{true};
+
+  std::atomic<bool> espEnemies{true};
   std::atomic<bool> espAimBoxes{true};
   std::atomic<bool> espProps{false};
   std::atomic<bool> espPanel{false};
 
   std::atomic<bool> aimEnabled{true};
   std::atomic<bool> aimEnemies{true};
-  std::atomic<bool> aimAnimals{false};
-  std::atomic<bool> aimBirds{false};
-  std::atomic<bool> aimVehicles{false};
   std::atomic<bool> noRecoil{false};
   std::atomic<bool> noSway{false};
   std::atomic<bool> noSpread{false};
@@ -64,9 +72,8 @@ struct Settings {
   std::atomic<float> aimWeightReach{kMaxWeight};
 
   std::atomic<float> aimPriorityEnemies{kMaxPriority};
-  std::atomic<float> aimPriorityAnimals{kDefaultAnimalPriority};
-  std::atomic<float> aimPriorityBirds{kDefaultBirdPriority};
-  std::atomic<float> aimPriorityVehicles{kDefaultVehiclePriority};
+
+  Fc3Settings fc3;
 
   bool menuVisible{true};
   bool unloadRequested{false};

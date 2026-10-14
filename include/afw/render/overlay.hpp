@@ -3,10 +3,6 @@
 #include <windows.h>
 
 #include <cstdint>
-#include <expected>
-#include <system_error>
-
-struct IDXGISwapChain;
 
 namespace afw::render {
 
@@ -20,9 +16,6 @@ struct SurfaceSize {
 [[nodiscard]] SurfaceSize BackBufferSize() noexcept;
 
 [[nodiscard]] HWND OverlayWindow() noexcept;
-
-[[nodiscard]] std::expected<void, std::error_code> DrawOverlayFrame(
-    IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept;
 
 void ShutdownOverlay() noexcept;
 

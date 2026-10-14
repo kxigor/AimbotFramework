@@ -16,6 +16,7 @@ add_library(afw_games_fc3 STATIC
   pawn.cpp
   bones.cpp
   census.cpp
+  update.cpp
   snapshot.cpp
   error.cpp
   weapon.cpp

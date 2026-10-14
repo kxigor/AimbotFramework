@@ -98,15 +98,15 @@ TEST(MathAngles, ScalesACorrectionAndClampsTheShare) {
 }
 
 TEST(MathAngles, MeasuresTheAngleBetweenTwoDirections) {
-  EXPECT_NEAR(AngleBetween(kEast, kEast), 0.0F, kTolerance);
-  EXPECT_NEAR(AngleBetween(kEast, kNorth), kQuarter, kTolerance);
-  EXPECT_NEAR(AngleBetween(kEast, kEast * -1.0F), kPi, kTolerance);
+  EXPECT_NEAR(AngleBetween(kEast, kEast).radians, 0.0F, kTolerance);
+  EXPECT_NEAR(AngleBetween(kEast, kNorth).radians, kQuarter, kTolerance);
+  EXPECT_NEAR(AngleBetween(kEast, kEast * -1.0F).radians, kPi, kTolerance);
 }
 
 // A zero-length direction is the one input acos cannot be rescued from, and it
 // must not read as "dead ahead".
 TEST(MathAngles, TreatsANowhereDirectionAsTheWorstPossibleMatch) {
-  EXPECT_NEAR(AngleBetween(kEast, Vec3{}), kPi, kTolerance);
+  EXPECT_NEAR(AngleBetween(kEast, Vec3{}).radians, kPi, kTolerance);
 }
 
 }  // namespace

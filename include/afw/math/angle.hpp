@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <compare>
 #include <numbers>
+#include <type_traits>
 
 namespace afw::math {
 
@@ -11,6 +13,14 @@ constexpr float kFullTurn{2.0F * kHalfTurn};
 constexpr float kQuarterTurn{kHalfTurn / 2.0F};
 constexpr float kHalf{0.5F};
 constexpr float kDegreesPerHalfTurn{180.0F};
+
+struct Angle {
+  [[nodiscard]] constexpr auto operator<=>(const Angle&) const = default;
+
+  float radians{};
+};
+
+static_assert(std::is_trivially_copyable_v<Angle>);
 
 struct ViewAngles {
   float yaw{};

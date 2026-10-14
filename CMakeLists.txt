@@ -25,7 +25,7 @@ endif()
 # =========================================================
 # 1. OPTIONS (prefixed AFW_ to keep cache names unique)
 # =========================================================
-option(AFW_BUILD_DLL          "Build the injectable aimbot.dll shim" ${AFW_DLL_DEFAULT})
+option(AFW_BUILD_DLL          "Build the injectable per-title shims"  ${AFW_DLL_DEFAULT})
 option(AFW_BUILD_INJECTOR     "Build the standalone injector.exe"    ${AFW_DLL_DEFAULT})
 option(AFW_BUILD_TESTS        "Build the GTest test suite"           ${AFW_DEV_DEFAULT})
 option(AFW_ENABLE_FORMAT_CHECK "Register clang-format as CTest"      ${AFW_DEV_DEFAULT})
@@ -89,11 +89,11 @@ endif()
 add_subdirectory(src)          # the afw::* libraries (always)
 
 if(AFW_BUILD_DLL)
-  add_subdirectory(dll)        # aimbot.dll shim
+  add_subdirectory(dll)        # one shim per title; today only aimbot_fc3.dll
 endif()
 
 if(AFW_BUILD_INJECTOR)
-  add_subdirectory(injector)   # injector.exe -> loads aimbot.dll via afw::remote
+  add_subdirectory(injector)   # injector.exe -> loads a shim via afw::remote
 endif()
 
 if(AFW_BUILD_TESTS)

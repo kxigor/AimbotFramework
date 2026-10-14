@@ -53,9 +53,9 @@ void ShowAimSettings(config::Settings& settings) {
   }
 
   Toggle("target enemies", settings.aimEnemies);
-  Toggle("target animals", settings.aimAnimals);
-  Toggle("target birds", settings.aimBirds);
-  Toggle("target vehicles", settings.aimVehicles);
+  Toggle("target animals", settings.fc3.aimAnimals);
+  Toggle("target birds", settings.fc3.aimBirds);
+  Toggle("target vehicles", settings.fc3.aimVehicles);
 
   Toggle("trace probe (writes to the log)", settings.traceProbe);
   Toggle("auto fire", settings.autoFire);
@@ -87,11 +87,11 @@ void ShowTargetChoice(config::Settings& settings) {
   if (settings.aimWeightPriority.load() > 0.0F) {
     Slider("priority: enemies", settings.aimPriorityEnemies, 0.0F,
            config::kMaxPriority, "%.2f");
-    Slider("priority: animals", settings.aimPriorityAnimals, 0.0F,
+    Slider("priority: animals", settings.fc3.aimPriorityAnimals, 0.0F,
            config::kMaxPriority, "%.2f");
-    Slider("priority: birds", settings.aimPriorityBirds, 0.0F,
+    Slider("priority: birds", settings.fc3.aimPriorityBirds, 0.0F,
            config::kMaxPriority, "%.2f");
-    Slider("priority: vehicles", settings.aimPriorityVehicles, 0.0F,
+    Slider("priority: vehicles", settings.fc3.aimPriorityVehicles, 0.0F,
            config::kMaxPriority, "%.2f");
   }
 }
@@ -153,11 +153,11 @@ void Draw() noexcept {
   if (espEnabled) {
     ImGui::SeparatorText("show");
     Toggle("enemies", settings.espEnemies);
-    Toggle("allies", settings.espAllies);
-    Toggle("civilians", settings.espCivilians);
-    Toggle("animals", settings.espAnimals);
-    Toggle("birds", settings.espBirds);
-    Toggle("vehicles", settings.espVehicles);
+    Toggle("allies", settings.fc3.espAllies);
+    Toggle("civilians", settings.fc3.espCivilians);
+    Toggle("animals", settings.fc3.espAnimals);
+    Toggle("birds", settings.fc3.espBirds);
+    Toggle("vehicles", settings.fc3.espVehicles);
     Toggle("props", settings.espProps);
     Toggle("debug panel", settings.espPanel);
     Toggle("aim boxes (head / spine)", settings.espAimBoxes);

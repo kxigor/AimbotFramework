@@ -6,7 +6,7 @@
 
 struct IDXGISwapChain;
 
-namespace afw::render {
+namespace afw::render::dxgi {
 
 using PresentFn = HRESULT(__stdcall*)(IDXGISwapChain*, UINT, UINT);
 
@@ -25,4 +25,4 @@ class PresentBinding {
 
 [[nodiscard]] PresentFn OriginalPresent() noexcept;
 
-}  // namespace afw::render
+}  // namespace afw::render::dxgi

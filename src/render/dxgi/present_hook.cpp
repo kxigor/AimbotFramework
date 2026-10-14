@@ -1,6 +1,6 @@
-#include <afw/render/present_hook.hpp>
+#include <afw/render/dxgi/present_hook.hpp>
 
-namespace afw::render {
+namespace afw::render::dxgi {
 
 namespace {
 
@@ -26,4 +26,4 @@ PresentFn OriginalPresent() noexcept {
   return kHook->Original<PresentFn>();
 }
 
-}  // namespace afw::render
+}  // namespace afw::render::dxgi

@@ -6,6 +6,7 @@
 #include <windows.h>
 
 #include <afw/core/cast.hpp>
+#include <afw/render/dxgi/overlay.hpp>
 #include <afw/render/overlay.hpp>
 #include <afw/win/com_ptr.hpp>
 #include <array>
@@ -182,6 +183,10 @@ void ShutdownOverlay() noexcept {
   overlay.window = nullptr;
 }
 
+}  // namespace afw::render
+
+namespace afw::render::dxgi {
+
 std::expected<void, std::error_code> DrawOverlayFrame(
     IDXGISwapChain* swapChain, FrameCallback onFrame) noexcept {
   if (swapChain == nullptr) {
@@ -209,4 +214,4 @@ std::expected<void, std::error_code> DrawOverlayFrame(
   return {};
 }
 
-}  // namespace afw::render
+}  // namespace afw::render::dxgi
